@@ -16,9 +16,10 @@ export function recommendPilotFocus(signals, certifiedSources) {
     const registered = new Set(registry.categories[category].map((source) => source.id));
     const eligible = rules.preferred_source_families.filter((id) => registered.has(id) && approved.has(id));
     const relevant = signals.filter((signal) => signal.category === category && rules.topics.includes(signal.topic));
-    const distinctBuyers = new Set(relevant.filter((signal) => signal.external === true && signal.settled === true && signal.delivered === true)
+    const paid = relevant.filter((signal) => signal.external === true && signal.settled === true && signal.delivered === true && signal.refunded !== true);
+    const distinctBuyers = new Set(paid
       .map((signal) => signal.buyer_id).filter(Boolean)).size;
-    const successfulDeliveries = relevant.filter((signal) => signal.external === true && signal.settled === true && signal.delivered === true).length;
+    const successfulDeliveries = paid.length;
     const unmetRequests = relevant.filter((signal) => signal.external === true && signal.unmet === true).length;
     recommendations.push({
       category,
