@@ -24,8 +24,7 @@ on:
       - "src/lib/country-risk-commercial-eligibility.ts"
       - "supabase/migrations/**"
       - ".github/workflows/global-production-coverage-gate.yml"
-  schedule:
-    - cron: "17 * * * *"
+  # Emergency quota hold: manual dispatch remains available after archive verification.
   workflow_dispatch:
 
 permissions:
