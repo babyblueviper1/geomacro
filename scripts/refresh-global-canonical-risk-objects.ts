@@ -113,6 +113,15 @@ async function refreshCountry(
       calculation_hash: object.integrity.calculation_hash,
       commercial_policy_version: commercial.policy_version,
       reason_codes: commercial.reason_codes,
+      diagnostics: {
+        recent_events_loaded: result.context.recent_events_loaded,
+        country_events_used: result.context.country_events_used,
+        evidence_event_count: object.evidence_summary.event_count,
+        evidence_count: object.evidence_summary.evidence_count,
+        independent_source_count: object.evidence_summary.independent_source_count,
+        embedded_commercial_reason_codes: object.commercial_eligibility.reason_codes,
+        embedded_verification_reason_codes: object.verification.reason_codes,
+      },
       error_code: null,
     } as const;
   } catch (error) {
@@ -140,6 +149,15 @@ async function refreshCountry(
       calculation_hash: null,
       commercial_policy_version: null,
       reason_codes: ["canonical_refresh_failed_closed"],
+      diagnostics: {
+        recent_events_loaded: null,
+        country_events_used: null,
+        evidence_event_count: null,
+        evidence_count: null,
+        independent_source_count: null,
+        embedded_commercial_reason_codes: [] as string[],
+        embedded_verification_reason_codes: [] as string[],
+      },
       error_code: "canonical_refresh_failed_closed",
     };
   }
