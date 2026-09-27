@@ -39,3 +39,23 @@ from storage.objects
 group by bucket_id, split_part(name, '/', 1)
 order by count(*) desc
 limit 25;
+
+-- Gzip is already used for raw and fragment objects. Count compressed bytes
+-- separately from Postgres metadata/index bytes; neither size substitutes for
+-- the other quota. No object content or private payload is returned.
+select split_part(name, '/', 1) as prefix,
+       count(*) as objects,
+       sum((metadata->>'size')::bigint) as compressed_object_bytes,
+       percentile_cont(0.5) within group
+         (order by (metadata->>'size')::bigint) as median_object_bytes
+from storage.objects
+where bucket_id = 'geomacro-live-intelligence'
+group by 1
+order by objects desc;
+
+-- Repetition is a candidate for future content-addressed storage. Existing
+-- snapshot and manifest rows remain immutable until reader/retention review.
+select count(*) as snapshots,
+       count(distinct (target_id, content_sha256)) as unique_target_contents,
+       count(*) - count(distinct (target_id, content_sha256)) as repeated_target_contents
+from public.live_raw_source_snapshots;
