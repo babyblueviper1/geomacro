@@ -15,6 +15,7 @@ import { publicRiskObjectTrustDiscovery } from "./risk-object-trust-discovery.se
 import type { GeomacroRiskObject } from "./risk-object-contract";
 import { PUBLIC_DEMO_RISK_PROFILE_REASON } from "./public-demo-risk-profile";
 import { createPublicSignedRiskObjectProjection } from "./risk-object-public-projection.server";
+import { getRiskObjectByObjectId } from "./risk-object-store.server";
 
 export const DEMO_ALLOWED_COUNTRIES = ["USA", "CHN"] as const;
 export const DEMO_ALLOWED_CORRIDORS = ["USA>CHN", "CHN>USA"] as const;
@@ -51,17 +52,9 @@ export type AgenticDemoRunOptions = {
 };
 
 async function loadStoredRiskObject(objectId: string) {
-  const db = requireRiskSupabase();
-  const { data, error } = await db
-    .from("geomacro_risk_objects")
-    .select("payload")
-    .eq("object_id", objectId)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!data?.payload) throw new Error("Verified Risk Object payload unavailable");
-
-  return data.payload as GeomacroRiskObject;
+  const object = await getRiskObjectByObjectId(objectId);
+  if (!object) throw new Error("Verified Risk Object payload unavailable");
+  return object;
 }
 
 async function assertPublicSandboxCorridorDeliverable(
