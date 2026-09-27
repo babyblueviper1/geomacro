@@ -1,0 +1,39 @@
+import { createHash } from "node:crypto";
+import { gunzipSync } from "node:zlib";
+import { requireRiskSupabase } from "./risk-supabase.server";
+import { verifyRiskObjectSignature } from "./risk-object-signing.server";
+import type { GeomacroRiskObject } from "./risk-object-contract";
+
+type ArchivedRiskObjectRow = {
+  object_id: string;
+  payload: unknown;
+  payload_hash?: string | null;
+  archive_key?: string | null;
+  archive_sha256?: string | null;
+};
+
+export async function loadRiskObjectPayload(row: ArchivedRiskObjectRow): Promise<GeomacroRiskObject> {
+  if (row.payload) return row.payload as GeomacroRiskObject;
+  if (!/^gro_[A-Za-z0-9_]+$/.test(row.object_id) ||
+      row.archive_key !== `risk-object-archive/v1/${row.object_id}.json.gz` ||
+      !/^[a-f0-9]{64}$/.test(row.payload_hash ?? "") ||
+      !/^[a-f0-9]{64}$/.test(row.archive_sha256 ?? "")) {
+    throw new Error("RISK_OBJECT_ARCHIVE_POINTER_INVALID");
+  }
+  const db = requireRiskSupabase();
+  const { data, error } = await db.storage.from("geomacro-live-intelligence").download(row.archive_key);
+  if (error || !data) throw new Error("RISK_OBJECT_ARCHIVE_UNAVAILABLE");
+  const compressed = Buffer.from(await data.arrayBuffer());
+  if (compressed.length > 2_000_000) throw new Error("RISK_OBJECT_ARCHIVE_TOO_LARGE");
+  if (createHash("sha256").update(compressed).digest("hex") !== row.archive_sha256) {
+    throw new Error("RISK_OBJECT_ARCHIVE_HASH_MISMATCH");
+  }
+  const decoded = gunzipSync(compressed, { maxOutputLength: 4_000_000 });
+  const object = JSON.parse(decoded.toString("utf8")) as GeomacroRiskObject;
+  if (object.object_id !== row.object_id ||
+      object.integrity?.payload_hash !== row.payload_hash ||
+      !verifyRiskObjectSignature(object).valid) {
+    throw new Error("RISK_OBJECT_ARCHIVE_INTEGRITY_FAILED");
+  }
+  return object;
+}
