@@ -1,5 +1,5 @@
 name: GRO B2 Edge read canary
-# Authenticated B2 read and signature verification on one pinned object.
+# Verify private B2 bytes and signature independently of database availability.
 
 on:
   push:
