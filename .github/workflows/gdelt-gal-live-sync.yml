@@ -23,6 +23,10 @@ jobs:
     env:
       APP_SUPABASE_URL: ${{ secrets.APP_SUPABASE_URL }}
       APP_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      B2_GDELT_PRIMARY: "1"
+      B2_S3_ENDPOINT: https://s3.us-east-005.backblazeb2.com
+      B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+      B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
       LIVE_STRUCTURE_TOKEN: ${{ secrets.LIVE_STRUCTURE_TOKEN }}
       GDELT_GAL_CYCLE_OUTPUT_DIR: gdelt-gal-cycle
       GDELT_GAL_CYCLE_MAX_ATTEMPTS: "3"

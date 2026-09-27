@@ -2,6 +2,45 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const BUCKET = "geomacro-live-intelligence";
 
+const b2Text = new TextEncoder();
+const b2Hex = (bytes: Uint8Array) => Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+const b2Sha = async (value: Uint8Array | string) =>
+  b2Hex(new Uint8Array(await crypto.subtle.digest("SHA-256", typeof value === "string" ? b2Text.encode(value) : value)));
+async function b2Hmac(key: Uint8Array | string, value: string): Promise<Uint8Array> {
+  const imported = await crypto.subtle.importKey("raw", typeof key === "string" ? b2Text.encode(key) : key,
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return new Uint8Array(await crypto.subtle.sign("HMAC", imported, b2Text.encode(value)));
+}
+async function downloadVerifiedB2Fragment(key: string, expectedSha: string): Promise<Blob> {
+  if (!/^geomacro-evidence\/v1\/live\/v1\/[A-Za-z0-9_./-]+\.ndjson\.gz$/.test(key) ||
+      key.includes("..") || !/^[a-f0-9]{64}$/.test(expectedSha)) throw new Error("B2_FRAGMENT_POINTER_INVALID");
+  const access = Deno.env.get("B2_ARCHIVE_READ_KEY_ID")?.trim();
+  const secret = Deno.env.get("B2_ARCHIVE_READ_APPLICATION_KEY")?.trim();
+  if (!access || !secret) throw new Error("B2_FRAGMENT_READ_KEY_UNAVAILABLE");
+  const host = "s3.us-east-005.backblazeb2.com";
+  const path = `/${["geomacro-private-archive", ...key.split("/")].map(encodeURIComponent).join("/")}`;
+  const stamp = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const day = stamp.slice(0, 8);
+  const empty = await b2Sha("");
+  const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+  const headers = `host:${host}\nx-amz-content-sha256:${empty}\nx-amz-date:${stamp}\n`;
+  const canonical = ["GET", path, "", headers, signedHeaders, empty].join("\n");
+  const scope = `${day}/us-east-005/s3/aws4_request`;
+  const toSign = ["AWS4-HMAC-SHA256", stamp, scope, await b2Sha(canonical)].join("\n");
+  const signing = await b2Hmac(await b2Hmac(await b2Hmac(await b2Hmac(`AWS4${secret}`, day), "us-east-005"), "s3"), "aws4_request");
+  const signature = b2Hex(await b2Hmac(signing, toSign));
+  const result = await fetch(`https://${host}${path}`, {
+    headers: { "x-amz-content-sha256": empty, "x-amz-date": stamp,
+      authorization: `AWS4-HMAC-SHA256 Credential=${access}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}` },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!result.ok) throw new Error(`B2_FRAGMENT_READ_FAILED_${result.status}`);
+  const bytes = new Uint8Array(await result.arrayBuffer());
+  if (bytes.byteLength > 8_000_000 || await b2Sha(bytes) !== expectedSha) throw new Error("B2_FRAGMENT_HASH_MISMATCH");
+  return new Blob([bytes], { type: "application/gzip" });
+}
+
+
 const STRUCTURE_VERSION = "live-structure-v1.4.9";
 const COUNTRY_VERSION = "country-attribution-v1.4.0";
 const STORY_VERSION = "story-hybrid-overlap-v1.4.2";
@@ -3063,15 +3102,15 @@ Deno.serve(async (req) => {
           "live_fragment_manifest",
         )
         .select(
-          "id,object_path,item_count,source_key,stream_key,period_end,verified_at",
+          "id,object_path,storage_bucket,compressed_sha256,item_count,source_key,stream_key,period_end,verified_at",
         )
         .eq(
           "id",
           requestedFragmentId,
         )
-.eq(
+.in(
           "verification_method",
-          "storage-readback-sha256",
+          ["storage-readback-sha256", "b2-readback-sha256"],
         )
         .maybeSingle();
 
@@ -3153,11 +3192,11 @@ Deno.serve(async (req) => {
           "live_fragment_manifest",
         )
         .select(
-          "id,object_path,item_count,period_end,verified_at",
+          "id,object_path,storage_bucket,compressed_sha256,item_count,period_end,verified_at",
         )
-        .eq(
+        .in(
           "verification_method",
-          "storage-readback-sha256",
+          ["storage-readback-sha256", "b2-readback-sha256"],
         )
         .order(
           "period_end",
@@ -3292,25 +3331,15 @@ Deno.serve(async (req) => {
     phase =
       'fragment_download';
 
-    const {
-      data: blob,
-      error: downloadError,
-    } = await db.storage
-      .from(BUCKET)
-      .download(
-        manifest.object_path,
-      );
-
-    if (
-      downloadError ||
-      !blob
-    ) {
-      throw (
-        downloadError ??
-        new Error(
-          "Fragment download failed",
-        )
-      );
+    let blob: Blob;
+    if (manifest.storage_bucket === "geomacro-private-archive") {
+      blob = await downloadVerifiedB2Fragment(manifest.object_path, manifest.compressed_sha256);
+    } else if (manifest.storage_bucket === BUCKET) {
+      const { data, error } = await db.storage.from(BUCKET).download(manifest.object_path);
+      if (error || !data) throw error ?? new Error("Fragment download failed");
+      blob = data;
+    } else {
+      throw new Error("Fragment storage bucket invalid");
     }
 
     const rawText =
