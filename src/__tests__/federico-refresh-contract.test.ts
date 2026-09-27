@@ -30,16 +30,16 @@ describe("Federico refresh contract", () => {
     expect(workflow).toContain("workflow_dispatch: {}");
     expect(workflow).not.toContain("push:");
     expect(workflow).not.toContain("schedule:");
-    // Partner refresh is deliberately operator-only; the master orchestrator owns live cadence.
     expect(workflow).toContain("scripts/invinoveritas-risk-object-preflight.ts");
     expect(read("src/lib/country-risk-engine.ts")).toContain("risk-object");
     expect(read("src/lib/country-risk-publisher.server.ts")).toContain("publish");
   });
 
-  it("refreshes OIDC immediately before the complete governed RSS registry", () => {
+  it("uses scoped GitHub OIDC for the governed RSS and corroboration path", () => {
     const workflow = read(".github/workflows/federico-seven-day-risk-refresh.yml");
-    expect(workflow).toContain("Refresh scoped GitHub OIDC token immediately before governed RSS");
+    expect(workflow).toContain("Acquire scoped GitHub Actions OIDC token");
     expect(workflow).toContain("GEOMACRO_FLASH_OIDC_TOKEN=%s");
+    expect(workflow).toContain("ACTIONS_ID_TOKEN_REQUEST_URL");
     expect(workflow).not.toContain("BREAKING_RSS_SOURCE_IDS:");
   });
 
@@ -49,25 +49,25 @@ describe("Federico refresh contract", () => {
     expect(workflow).toContain("Verify every configured RSS source completed");
     expect(workflow).toContain("event.get('rss') == 'ready'");
     expect(workflow).toContain("event.get('kind') in {'rss_source_complete', 'rss_error'}");
-    expect(workflow).toContain('country_iso3:"CHN",as_of:$as_of,candidate_offset:$offset');    const corroborator = read(
+    expect(workflow).toContain('country_iso3:\"CHN\",as_of:$as_of,candidate_offset:$offset');
+    const corroborator = read(
       "supabase/functions/live-flash-corroborate/index.ts",
     );
-    expect(corroborator).toContain(
-      "candidate_country_iso3",
-    );
+    expect(corroborator).toContain("candidate_country_iso3");
     expect(workflow).not.toContain("xinhua_english_china_rss");
     expect(workflow).not.toContain("federal_reserve_press_rss");
     expect(workflow).toContain("last_state");
-    expect(workflow).toContain("remained failed after the worker's bounded recovery policy");
   });
 
-  it("derives GDELT drain bounds from the actual fragment response", () => {
+  it("treats absent qualifying strict evidence as a successful fail-closed no-publication outcome", () => {
     const workflow = read(".github/workflows/federico-seven-day-risk-refresh.yml");
-    expect(workflow).toContain("fragment_total=\"$(jq -r '.fragment_total // 0' \"${response_file}\")\"");
-    expect(workflow).toContain("batch_size=\"$(jq -r '.batch_size // 0' \"${response_file}\")\"");
-    expect(workflow).toContain("status=\"$(jq -r '.status // \"\"' \"${response_file}\")\"");
-    expect(workflow).toContain('if [[ "${status}" == "nothing_new" ]]; then');
-    expect(workflow).not.toContain("max_batches=32");
-    expect(workflow).not.toContain('for attempt in $(seq 1 "${max_batches}"); do');
+    expect(workflow).toContain("id: readiness");
+    expect(workflow).toContain("FEDERICO_EVIDENCE_READY=false");
+    expect(workflow).toContain("strict_evidence_gate_not_met");
+    expect(workflow).toContain("publication_attempted:false");
+    expect(workflow).toContain("federico-no-publication-${{ github.run_id }}");
+    expect(workflow).toContain("sha256sum corroboration.ndjson evidence-readiness.json no-publication.json > SHA256SUMS.txt");
+    expect(workflow).toContain("if: ${{ steps.readiness.outputs.ready == 'true' }}");
+    expect(workflow).toContain("bun scripts/publish-country-risk-object.ts CHN FEDERICO_STRICT");
   });
 });
