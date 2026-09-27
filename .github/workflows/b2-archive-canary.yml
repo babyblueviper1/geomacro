@@ -1,6 +1,9 @@
 name: B2 archive one-fragment canary
 
 on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/b2-archive-canary.yml]
   workflow_dispatch:
     inputs:
       fragment_id:
@@ -38,5 +41,5 @@ jobs:
       - run: bun install --frozen-lockfile --ignore-scripts
       - name: Copy one compressed fragment and verify readback
         env:
-          CANARY_FRAGMENT_ID: ${{ inputs.fragment_id }}
+          CANARY_FRAGMENT_ID: ${{ inputs.fragment_id || 'adf4cc85-5ed4-45eb-9092-dc1fc132c8f4' }}
         run: node scripts/ops/b2-archive-canary.mjs "$CANARY_FRAGMENT_ID"
