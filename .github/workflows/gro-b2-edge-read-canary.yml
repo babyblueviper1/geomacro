@@ -1,5 +1,5 @@
 name: GRO B2 Edge read canary
-# Status-only diagnostic for the pinned read canary.
+# Authenticated B2 read and signature verification on one pinned object.
 
 on:
   push:
