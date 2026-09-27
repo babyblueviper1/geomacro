@@ -48,6 +48,7 @@ jobs:
           timeout 30s node --check scripts/sync-country-raw-source-mesh.mjs
           timeout 30s node --check scripts/audit-global-raw-source-coverage.mjs
           timeout 30s node --check scripts/audit-global-raw-source-runtime.mjs
+          timeout 30s node --check scripts/reconcile-structured-event-commercial-rights.mjs
 
       - name: Reconcile and capture country web/API sources
         shell: bash
@@ -75,11 +76,26 @@ jobs:
           : > country-raw-structure-summary.ndjson
           for id in "${ids[@]}"; do
             response="country-raw-structure-${id}.json"
-            curl --fail-with-body -sS --retry 3 --retry-all-errors --retry-delay 2 --retry-max-time 90               -X POST "${APP_SUPABASE_URL%/}/functions/v1/live-structure-intelligence"               -H "x-geomacro-structure-token: ${LIVE_STRUCTURE_TOKEN}"               -H "content-type: application/json"               -d "{\"fragment_id\":\"$id\"}"               -o "$response"
+            curl --fail-with-body -sS --retry 3 --retry-all-errors --retry-delay 2 --retry-max-time 90 \
+              -X POST "${APP_SUPABASE_URL%/}/functions/v1/live-structure-intelligence" \
+              -H "x-geomacro-structure-token: ${LIVE_STRUCTURE_TOKEN}" \
+              -H "content-type: application/json" \
+              -d "{\"fragment_id\":\"$id\"}" \
+              -o "$response"
             jq -e '.ok == true' "$response" >/dev/null
             jq -c '{fragment_id,ok,status,evidence_structured,evidence_excluded,events_created,events_updated,remaining,has_more}' "$response" | tee -a country-raw-structure-summary.ndjson
           done
           jq -n --argjson count "${#ids[@]}" '{structured_fragments:$count}' | tee country-raw-structure-summary.json
+
+      - name: Reconcile structured event commercial rights
+        shell: bash
+        env:
+          RECONCILE_SOURCE_KEYS: country_raw_web_mesh
+          RECONCILE_LOOKBACK_MINUTES: "120"
+        run: |
+          set -euo pipefail
+          node scripts/reconcile-structured-event-commercial-rights.mjs 2>&1 | tee country-raw-rights-reconcile.log
+          grep -q '"ok": true' country-raw-rights-reconcile.log
 
       - name: Verify fresh raw runtime coverage
         shell: bash
@@ -96,6 +112,7 @@ jobs:
           if [ -f country-raw-structure-summary.ndjson ]; then
             while IFS= read -r line; do jq -e '.ok == true' <<<"$line" >/dev/null; done < country-raw-structure-summary.ndjson
           fi
+          test -f country-raw-rights-reconcile.log
 
       - name: Upload private raw-source operational evidence
         if: always()
@@ -107,5 +124,6 @@ jobs:
             country-raw-structure-summary.json
             country-raw-structure-summary.ndjson
             country-raw-structure-*.json
+            country-raw-rights-reconcile.log
           if-no-files-found: warn
           retention-days: 30
