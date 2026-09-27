@@ -26,12 +26,23 @@ const orchestrator = readFileSync(
   "utf8",
 );
 
+function expectMasterScheduleOrQuotaRecoveryHold(source) {
+  const emergencyMarker =
+    "Emergency quota hold. Preserve workflow_dispatch for controlled recovery.";
+  if (source.includes(emergencyMarker)) {
+    expect(source).toContain("workflow_dispatch:");
+    expect(source).not.toContain("schedule:");
+    return;
+  }
+  expect(source).toContain('cron: "7,22,37,52 * * * *"');
+}
+
 describe("GRI public proof consistency workflow contract", () => {
-  it("keeps manual proof while scheduling is owned by the master orchestrator", () => {
+  it("keeps manual proof while scheduling is owned by the master orchestrator or explicitly quota-held", () => {
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).not.toContain("23 */2 * * *");
     expect(workflow).not.toContain("push:");
-    expect(orchestratorWorkflow).toContain('cron: "7,22,37,52 * * * *"');
+    expectMasterScheduleOrQuotaRecoveryHold(orchestratorWorkflow);
     expect(orchestrator).toContain('key: "gri_publish"');
     expect(workflow).toContain("scripts/audit-gri-public-proof-consistency.mjs");
     expect(workflow).toContain("scripts/verify-gri-snapshot-v12.js");
