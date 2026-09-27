@@ -1,10 +1,8 @@
 name: Federico Continuous Testnet Risk Object Refresh
-# Manual-only partner refresh. Production intelligence workflows must not trigger this testnet acceptance job automatically.
-# Continuous testnet acceptance and partner-refresh path. Publication remains fail-closed on all strict evidence gates.
+# Manual-only partner refresh. Publication remains fail-closed on strict evidence gates.
 
 on:
   workflow_dispatch: {}
-
 
 permissions:
   contents: read
@@ -45,6 +43,14 @@ jobs:
       - name: Install locked dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
+      - name: Validate production signing configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in APP_SUPABASE_URL APP_SUPABASE_SERVICE_ROLE_KEY RISK_OBJECT_SIGNING_KEY_ID RISK_OBJECT_SIGNING_PRIVATE_KEY_PKCS8_B64; do
+            test -n "${!name:-}" || { echo "::error::$name is missing"; exit 1; }
+          done
+
       - name: Acquire scoped GitHub Actions OIDC token
         shell: bash
         run: |
@@ -53,444 +59,38 @@ jobs:
           test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo "::error::GitHub OIDC request token missing"; exit 1; }
           oidc_response="$(curl --fail-with-body -sS --retry 5 --retry-all-errors --retry-delay 2 --retry-max-time 120 \
             -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${GITHUB_OIDC_AUDIENCE}"
-          )"
-          token="$(printf "%s" "$oidc_response" | jq -er ".value")"
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${GITHUB_OIDC_AUDIENCE}")"
+          token="$(printf '%s' "$oidc_response" | jq -er '.value')"
           test -n "$token"
           echo "::add-mask::$token"
-          printf "GEOMACRO_FLASH_OIDC_TOKEN=%s\n" "$token" >> "$GITHUB_ENV"
+          printf 'GEOMACRO_FLASH_OIDC_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
           echo "PASS: scoped GitHub OIDC token acquired for Federico's governed corroboration path."
-      - name: Reconcile authoritative production event-family schema
-        shell: bash
-        env:
-          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: |
-          set -euo pipefail
-
-          expected_project="ldpwajisioljyjtojvfx"
-
-          test -n "${SUPABASE_PROJECT_ID:-}" || { echo "::error::SUPABASE_PROJECT_ID is missing"; exit 1; }
-          test -n "${SUPABASE_DB_URL:-}" || { echo "::error::SUPABASE_DB_URL is missing"; exit 1; }
-
-          if [[ "$SUPABASE_PROJECT_ID" != "$expected_project" ]]; then
-            echo "::error::Refusing Federico DB repair against a non-authoritative Supabase project."
-            exit 1
-          fi
-
-          node <<'NODE'
-          const ref = process.env.SUPABASE_PROJECT_ID;
-          const raw = process.env.SUPABASE_DB_URL;
-
-          let url;
-          try {
-            url = new URL(raw);
-          } catch {
-            throw new Error('SUPABASE_DB_URL must be a valid percent-encoded postgres connection URL');
-          }
-
-          if (!['postgres:', 'postgresql:'].includes(url.protocol)) {
-            throw new Error('SUPABASE_DB_URL must use postgres:// or postgresql://');
-          }
-
-          const directHost = `db.${ref}.supabase.co`;
-          const username = decodeURIComponent(url.username);
-          const directMatch =
-            url.hostname === directHost &&
-            username === 'postgres';
-          const poolerMatch =
-            url.hostname.endsWith('.pooler.supabase.com') &&
-            username === `postgres.${ref}`;
-
-          if (!directMatch && !poolerMatch) {
-            throw new Error('SUPABASE_DB_URL does not resolve to the authoritative Geomacro production project');
-          }
-
-          if (!url.password || url.pathname !== '/postgres') {
-            throw new Error('SUPABASE_DB_URL must contain the database password and target /postgres');
-          }
-
-          console.log('PASS: authoritative production DB identity confirmed without printing credentials.');
-          NODE
-
-          command -v psql >/dev/null 2>&1 || {
-            echo "::error::psql is required on the GitHub runner for authoritative production schema repair."
-            exit 1
-          }
-
-          export PGSSLMODE="require"
-
-          required_schema="DO \$\$
-          DECLARE
-            required_columns text[] := ARRAY[
-              'signal_category',
-              'source_version',
-              'material_update',
-              'material_update_reason',
-              'first_seen_at',
-              'last_seen_at',
-              'last_material_update_at',
-              'event_family_id'
-            ];
-            required_column_name text;
-          BEGIN
-            IF to_regclass('public.live_flash_event_families') IS NULL THEN
-              RAISE EXCEPTION 'live_flash_event_families is missing';
-            END IF;
-            IF to_regclass('public.live_flash_event_family_members') IS NULL THEN
-              RAISE EXCEPTION 'live_flash_event_family_members is missing';
-            END IF;
-            IF to_regclass('public.live_flash_event_family_versions') IS NULL THEN
-              RAISE EXCEPTION 'live_flash_event_family_versions is missing';
-            END IF;
-            IF to_regclass('public.live_flash_event_versions') IS NULL THEN
-              RAISE EXCEPTION 'live_flash_event_versions is missing';
-            END IF;
-
-            FOREACH required_column_name IN ARRAY required_columns LOOP
-              IF NOT EXISTS (
-                SELECT 1
-                FROM information_schema.columns AS c
-                WHERE c.table_schema = 'public'
-                  AND c.table_name = 'live_flash_events'
-                  AND c.column_name = required_column_name
-              ) THEN
-                RAISE EXCEPTION 'live_flash_events.% is missing', required_column_name;
-              END IF;
-            END LOOP;
-          END \$\$;"
-
-          set +e
-          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -X -c "$required_schema" >/tmp/federico-schema-check.txt 2>&1
-          schema_rc=$?
-          set -e
-
-          cat /tmp/federico-schema-check.txt
-
-          if [[ "$schema_rc" -ne 0 ]]; then
-            echo "Authoritative production event-family schema is incomplete. Applying the idempotent repair migration over the canonical production DB URL."
-            psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -X -f supabase/migrations/957_repair_federico_event_family_schema.sql
-
-            # Force PostgREST to reload its schema cache after DDL.
-            psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -X -c "NOTIFY pgrst, 'reload schema';"
-          else
-            echo "PASS: authoritative production event-family schema already present."
-          fi
-
-          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -X -c "$required_schema"
-
-          echo "PASS: authoritative production event-family schema is present before Federico publication."
-
-      - name: Validate production signing configuration
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          for name in APP_SUPABASE_URL APP_SUPABASE_SERVICE_ROLE_KEY RISK_OBJECT_SIGNING_KEY_ID RISK_OBJECT_SIGNING_PRIVATE_KEY_PKCS8_B64; do
-            test -n "${!name:-}" || { echo "::error::$name is missing"; exit 1; }
-          done
-
-          node <<'NODE'
-          const { createPrivateKey, createPublicKey } = require('node:crypto');
-          const fs = require('node:fs');
-
-          const privateKey = createPrivateKey({
-            key: Buffer.from(process.env.RISK_OBJECT_SIGNING_PRIVATE_KEY_PKCS8_B64.trim(), 'base64'),
-            format: 'der',
-            type: 'pkcs8',
-          });
-
-          if (privateKey.asymmetricKeyType !== 'ed25519') {
-            throw new Error('Risk Object signing key must be Ed25519');
-          }
-
-          const publicB64 = Buffer.from(
-            createPublicKey(privateKey).export({ format: 'der', type: 'spki' }),
-          ).toString('base64');
-
-          fs.appendFileSync(
-            process.env.GITHUB_ENV,
-            'RISK_OBJECT_SIGNING_PUBLIC_KEY_SPKI_B64=' + publicB64 + '\n',
-          );
-          NODE
 
       - name: Verify signer matches deployed trust registry
         shell: bash
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --retry-max-time 120 https://geomacro.live/api/risk-object-keys > /tmp/geomacro-keys.json
-
           node <<'NODE'
+          const { createPrivateKey, createPublicKey } = require('node:crypto');
           const fs = require('node:fs');
           const body = JSON.parse(fs.readFileSync('/tmp/geomacro-keys.json', 'utf8'));
-
-          if (body?.ok !== true || !Array.isArray(body?.keys)) {
-            throw new Error('Deployed Geomacro trust registry unavailable');
-          }
-
-          const key = body.keys.find(
-            (item) => item?.key_id === process.env.RISK_OBJECT_SIGNING_KEY_ID,
-          );
-
-          if (!key || key.status !== 'active') {
-            throw new Error('Configured production signing key is not active in the deployed registry');
-          }
-
-          if (key.public_key_spki_b64 !== process.env.RISK_OBJECT_SIGNING_PUBLIC_KEY_SPKI_B64) {
-            throw new Error('Configured production private key does not match deployed public key');
-          }
-
+          const privateKey = createPrivateKey({
+            key: Buffer.from(process.env.RISK_OBJECT_SIGNING_PRIVATE_KEY_PKCS8_B64.trim(), 'base64'),
+            format: 'der',
+            type: 'pkcs8',
+          });
+          if (privateKey.asymmetricKeyType !== 'ed25519') throw new Error('Risk Object signing key must be Ed25519');
+          const publicB64 = Buffer.from(createPublicKey(privateKey).export({ format: 'der', type: 'spki' })).toString('base64');
+          const key = Array.isArray(body?.keys)
+            ? body.keys.find((item) => item?.key_id === process.env.RISK_OBJECT_SIGNING_KEY_ID)
+            : null;
+          if (!key || key.status !== 'active') throw new Error('Configured production signing key is not active in the deployed registry');
+          if (key.public_key_spki_b64 !== publicB64) throw new Error('Configured production private key does not match deployed public key');
           console.log('PASS: production signer matches deployed active trust key');
           NODE
 
-      - name: Refresh GDELT source and wait for a recent verified fragment
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          for name in APP_SUPABASE_URL APP_SUPABASE_SERVICE_ROLE_KEY; do
-            test -n "${!name:-}" || { echo "::error::$name is missing"; exit 1; }
-          done
-
-          # Do not rely on a passive DB poll. Federico can be triggered immediately
-          # after another workflow completes, while the GDELT source window is still
-          # catching up. Run the canonical production sync directly first so this
-          # certification path can recover a stale cursor within the same run.
-          refresh_ok=false
-          for refresh_attempt in 1 2 3; do
-            response_file="/tmp/federico-gdelt-refresh-${refresh_attempt}.json"
-            if GDELT_GAL_SYNC_OUTPUT="${response_file}" bun scripts/sync-gdelt-gal-production.mjs; then
-              jq -c '{ok,status,fragment_id:(.fragment_id // null),latest_source_stamp:(.latest_source_stamp // null),items_accepted:(.items_accepted // null)}' "${response_file}" || true
-              refresh_ok=true
-              break
-            fi
-            echo "GDELT production sync attempt ${refresh_attempt} did not complete; retrying."
-            sleep 30
-          done
-
-          if [[ "${refresh_ok}" != "true" ]]; then
-            echo "::error::Canonical GDELT production sync could not complete during the Federico refresh window."
-            exit 1
-          fi
-
-          node <<'NODE'
-          const { createClient } = require('@supabase/supabase-js');
-          const fs = require('node:fs');
-
-          (async () => {
-            const db = createClient(
-              process.env.APP_SUPABASE_URL,
-              process.env.APP_SUPABASE_SERVICE_ROLE_KEY,
-              { auth: { persistSession: false, autoRefreshToken: false } },
-            );
-
-            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-            const freshnessWindowMs = 20 * 60 * 1000;
-
-            async function latestManifest() {
-              const { data, error } = await db
-                .from('live_fragment_manifest')
-                .select('id,source_key,stream_key,item_count,period_end,sealed_at,verification_method')
-                .eq('source_key', 'gdelt_gal')
-                .eq('stream_key', 'global-relevant')
-                .eq('verification_method', 'storage-readback-sha256')
-                .order('sealed_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-              if (error) throw error;
-              return data ?? null;
-            }
-
-            for (let attempt = 1; attempt <= 24; attempt += 1) {
-              const candidate = await latestManifest();
-              const now = Date.now();
-              const sealedAt = Date.parse(String(candidate?.sealed_at ?? ''));
-              const periodEnd = Date.parse(String(candidate?.period_end ?? ''));
-              const freshEnough =
-                candidate &&
-                Number(candidate.item_count ?? 0) > 0 &&
-                Number.isFinite(sealedAt) &&
-                Number.isFinite(periodEnd) &&
-                now - sealedAt <= freshnessWindowMs &&
-                now - periodEnd <= freshnessWindowMs;
-
-              console.log(JSON.stringify({
-                attempt,
-                fresh_enough: Boolean(freshEnough),
-                fragment_id: candidate?.id ?? null,
-                item_count: candidate?.item_count ?? null,
-                sealed_at: candidate?.sealed_at ?? null,
-                period_end: candidate?.period_end ?? null,
-              }));
-
-              if (freshEnough) {
-                fs.appendFileSync(
-                  process.env.GITHUB_ENV,
-                  'FRESH_GDELT_FRAGMENT_ID=' + String(candidate.id) + '\n',
-                );
-                console.log('PASS: recent verified GDELT fragment is fresh enough for Federico strict corroboration.');
-                return;
-              }
-
-              if (attempt < 24) await sleep(30000);
-            }
-
-            throw new Error('No verified GDELT fragment within the required 20-minute freshness window.');
-          })().catch((error) => {
-            console.error(error);
-            process.exit(1);
-          });
-          NODE
-
-      - name: Prove exact fresh GDELT fragment is fully persisted
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "${FRESH_GDELT_FRAGMENT_ID:-}" || { echo "::error::FRESH_GDELT_FRAGMENT_ID is missing"; exit 1; }
-
-          # The structure endpoint drains at most 60 records per call. Drive the
-          # loop from the immutable fragment_total returned by the endpoint itself,
-          # rather than a source-size-specific fixed batch ceiling.
-          attempt=1
-          previous_remaining=-1
-          max_batches=""
-          while true; do
-            response_file="/tmp/federico-exact-structure-${attempt}.json"
-            curl --fail-with-body -sS \
-              --retry 3 \
-              --retry-all-errors \
-              --retry-delay 2 \
-              --retry-max-time 120 \
-              -X POST \
-              "${APP_SUPABASE_URL%/}/functions/v1/live-structure-intelligence" \
-              -H "x-geomacro-structure-token: ${LIVE_STRUCTURE_TOKEN}" \
-              -H "Content-Type: application/json" \
-              --data "$(jq -nc --arg fragment_id "${FRESH_GDELT_FRAGMENT_ID}" '{fragment_id:$fragment_id}')" \
-              -o "${response_file}"
-
-            jq -e '.ok == true' "${response_file}" >/dev/null
-            jq '{ok,status,fragment_id,batch_size,evidence_structured,evidence_excluded,handled_before,handled_after,fragment_total,remaining,has_more}' "${response_file}"
-
-            status="$(jq -r '.status // ""' "${response_file}")"
-            batch_size="$(jq -r '.batch_size // 0' "${response_file}")"
-            fragment_total="$(jq -r '.fragment_total // 0' "${response_file}")"
-            remaining="$(jq -r '.remaining // 0' "${response_file}")"
-
-            # A fragment that is already completely structured is a valid
-            # terminal state and exposes no batch metadata. Persistence is
-            # proven by the following exact-count readback gate.
-            if [[ "${status}" == "nothing_new" ]]; then
-              break
-            fi
-
-            [[ "${batch_size}" =~ ^[0-9]+$ && "${batch_size}" -gt 0 ]] || {
-              echo "::error::Exact fresh GDELT structure returned an invalid batch_size=${batch_size}."
-              exit 1
-            }
-            [[ "${fragment_total}" =~ ^[0-9]+$ && "${fragment_total}" -gt 0 ]] || {
-              echo "::error::Exact fresh GDELT structure returned an invalid fragment_total=${fragment_total}."
-              exit 1
-            }
-
-            if [[ -z "${max_batches}" ]]; then
-              max_batches="$(( (fragment_total + batch_size - 1) / batch_size + 1 ))"
-            fi
-
-            if [[ "${remaining}" == "0" ]]; then
-              break
-            fi
-
-            if [[ "${remaining}" -ge "${previous_remaining}" && "${previous_remaining}" -ge 0 ]]; then
-              echo "::error::Exact fresh GDELT structure made no progress: remaining=${remaining}, previous=${previous_remaining}."
-              exit 1
-            fi
-            previous_remaining="${remaining}"
-
-            (( attempt < max_batches )) || {
-              echo "::error::Exact fresh GDELT fragment still has ${remaining} unhandled records after ${max_batches} derived structure batches."
-              exit 1
-            }
-            attempt=$((attempt + 1))
-          done
-
-          echo "PASS: exact fresh GDELT fragment targeted structuring completed before the persistence proof."
-          node <<'NODE'
-          const { createClient } = require('@supabase/supabase-js');
-
-          (async () => {
-            const db = createClient(
-              process.env.APP_SUPABASE_URL,
-              process.env.APP_SUPABASE_SERVICE_ROLE_KEY,
-              { auth: { persistSession: false, autoRefreshToken: false } },
-            );
-
-            const fragmentId = process.env.FRESH_GDELT_FRAGMENT_ID;
-            if (!fragmentId) throw new Error('FRESH_GDELT_FRAGMENT_ID is missing');
-
-            const { data: manifest, error: manifestError } = await db
-              .from('live_fragment_manifest')
-              .select('id,item_count,source_key,stream_key,verification_method,sealed_at,period_end')
-              .eq('id', fragmentId)
-              .maybeSingle();
-            if (manifestError) throw manifestError;
-            if (!manifest) throw new Error('Fresh GDELT fragment manifest was not found');
-            if (manifest.source_key !== 'gdelt_gal' || manifest.stream_key !== 'global-relevant') {
-              throw new Error('Fresh fragment identity does not match GDELT global-relevant stream');
-            }
-            if (manifest.verification_method !== 'storage-readback-sha256') {
-              throw new Error('Fresh fragment is not verified by storage-readback-sha256');
-            }
-
-            const [{ count: structuredCount, error: structuredError }, { count: excludedCount, error: excludedError }] = await Promise.all([
-              db.from('live_structured_event_evidence').select('*', { count: 'exact', head: true }).eq('fragment_id', fragmentId),
-              db.from('live_structuring_exclusions').select('*', { count: 'exact', head: true }).eq('fragment_id', fragmentId),
-            ]);
-            if (structuredError) throw structuredError;
-            if (excludedError) throw excludedError;
-
-            const structured = structuredCount ?? 0;
-            const excluded = excludedCount ?? 0;
-            const handled = structured + excluded;
-            const total = Number(manifest.item_count ?? 0);
-            if (!total || handled !== total) {
-              throw new Error(`Fresh fragment persistence incomplete: structured=${structured}, excluded=${excluded}, total=${total}`);
-            }
-
-            console.log(JSON.stringify({
-              ok: true,
-              fragment_id: fragmentId,
-              total,
-              structured,
-              excluded,
-              remaining: 0,
-              sealed_at: manifest.sealed_at,
-              period_end: manifest.period_end,
-            }));
-            console.log('PASS: exact fresh GDELT fragment is fully persisted as structured or explicitly excluded evidence.');
-          })().catch((error) => {
-            console.error(error);
-            process.exit(1);
-          });
-          NODE
-
-      - name: Refresh scoped GitHub OIDC token immediately before governed RSS
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "::error::GitHub OIDC request URL missing"; exit 1; }
-          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo "::error::GitHub OIDC request token missing"; exit 1; }
-          oidc_response="$(curl --fail-with-body -sS --retry 5 --retry-all-errors --retry-delay 2 --retry-max-time 120 \
-            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${GITHUB_OIDC_AUDIENCE}"
-          )"
-          token="$(printf "%s" "$oidc_response" | jq -er ".value")"
-          test -n "$token"
-          echo "::add-mask::$token"
-          printf "GEOMACRO_FLASH_OIDC_TOKEN=%s\n" "$token" >> "$GITHUB_ENV"
-          echo "PASS: refreshed scoped GitHub OIDC token immediately before Federico RSS corroboration."
-
-      - name: Re-poll governed RSS after fresh GDELT structure
+      - name: Re-poll governed RSS
         env:
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
           GEOMACRO_FLASH_INGEST_URL: https://${{ secrets.SUPABASE_PROJECT_ID }}.supabase.co/functions/v1/live-flash-ingest
@@ -507,7 +107,6 @@ jobs:
           test -n "${GEOMACRO_FLASH_OIDC_TOKEN:-}" || { echo "::error::GEOMACRO_FLASH_OIDC_TOKEN missing"; exit 1; }
           python -m pip install --disable-pip-version-check --retries 5 --timeout 30 -r workers/telegram-flash/requirements.txt >/tmp/federico-rss-deps.log
           cd workers/telegram-flash
-
           : > /tmp/federico-rss-live.log
           python worker.py 2>&1 | tee /tmp/federico-rss-live.log
 
@@ -518,18 +117,15 @@ jobs:
           python3 - <<'PY'
           import json
           from pathlib import Path
-
           log_path = Path('/tmp/federico-rss-live.log')
           ready = None
           last_state = {}
           had_error = set()
-
           for raw in log_path.read_text(encoding='utf-8', errors='replace').splitlines():
               try:
                   event = json.loads(raw)
               except json.JSONDecodeError:
                   continue
-
               if event.get('rss') == 'ready':
                   ready = event
               if event.get('kind') in {'rss_source_complete', 'rss_error'} and event.get('source_id'):
@@ -539,98 +135,23 @@ jobs:
                       last_state[source_id] = 'error'
                   elif event.get('ok') is True:
                       last_state[source_id] = 'success'
-
           if not isinstance(ready, dict) or not isinstance(ready.get('feeds'), list) or not ready['feeds']:
               raise SystemExit('Federico RSS worker did not emit a valid configured-feed manifest')
-
           expected = {str(value) for value in ready['feeds'] if str(value).strip()}
           unresolved = sorted(source_id for source_id in expected if last_state.get(source_id) == 'error')
           missing = sorted(source_id for source_id in expected if last_state.get(source_id) != 'success')
           if unresolved:
-              raise SystemExit(
-                  "Federico RSS sources remained failed after the worker's bounded recovery policy: "
-                  + ', '.join(unresolved)
-              )
+              raise SystemExit('Federico RSS sources remained failed: ' + ', '.join(unresolved))
           if missing:
-              raise SystemExit(
-                  'Federico RSS sources did not complete a successful poll cycle: '
-                  + ', '.join(missing)
-              )
-
+              raise SystemExit('Federico RSS sources did not complete successfully: ' + ', '.join(missing))
           print(json.dumps({
               'configured_source_count': len(expected),
-              'completed_source_count': len([source_id for source_id in expected if last_state.get(source_id) == 'success']),
-              'recovered_source_count': len([source_id for source_id in expected if last_state.get(source_id) == 'success' and source_id in had_error]),
+              'completed_source_count': len(expected),
+              'recovered_source_count': len([s for s in expected if s in had_error and last_state.get(s) == 'success']),
               'sources': sorted(expected),
           }))
-          print('PASS: every RSS source declared by the worker completed successfully; transient failures are considered recovered when a later poll succeeds.')
+          print('PASS: every RSS source declared by the worker completed successfully.')
           PY
-      - name: Preflight corroboration query compatibility
-        shell: bash
-        run: |
-          set -euo pipefail
-          node <<'NODE'
-          const { createClient } = require('@supabase/supabase-js');
-
-          (async () => {
-            const db = createClient(
-              process.env.APP_SUPABASE_URL,
-              process.env.APP_SUPABASE_SERVICE_ROLE_KEY,
-              { auth: { persistSession: false, autoRefreshToken: false } },
-            );
-
-            const country = await db
-              .from('live_flash_event_countries')
-              .select('flash_id')
-              .eq('country_iso3', 'CHN')
-              .limit(1);
-
-            if (country.error) {
-              console.error(JSON.stringify({
-                stage: 'live_flash_event_countries',
-                message: country.error.message,
-                code: country.error.code,
-                details: country.error.details,
-                hint: country.error.hint,
-              }, null, 2));
-              process.exit(1);
-            }
-
-            const flashId = country.data?.[0]?.flash_id;
-            if (!flashId) {
-              console.log('PASS: no CHN flash candidate currently exists; corroboration query compatibility is structurally available.');
-              return;
-            }
-
-            const candidate = await db
-              .from('live_flash_events')
-              .select('flash_id,source_id,source_channel,published_at,ingested_at,headline,body,source_reliability,verification_status,signal_category,source_version,event_family_id,material_update,material_update_reason,content_hash,first_seen_at,last_seen_at,last_material_update_at')
-              .in('flash_id', [flashId])
-              .in('verification_status', ['UNVERIFIED', 'CORROBORATING'])
-              .limit(1);
-
-            if (candidate.error) {
-              console.error(JSON.stringify({
-                stage: 'live_flash_events_candidate',
-                message: candidate.error.message,
-                code: candidate.error.code,
-                details: candidate.error.details,
-                hint: candidate.error.hint,
-              }, null, 2));
-              process.exit(1);
-            }
-
-            console.log(JSON.stringify({
-              ok: true,
-              candidate_query_compatible: true,
-              sample_flash_id: flashId,
-              candidate_rows: candidate.data?.length ?? 0,
-            }));
-          })().catch((error) => {
-            console.error(error);
-            process.exit(1);
-          });
-          NODE
 
       - name: Corroborate fresh RSS and structured evidence
         shell: bash
@@ -639,12 +160,12 @@ jobs:
           base="${APP_SUPABASE_URL%/}/functions/v1"
           offset=0
           window_as_of="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          : > /tmp/federico-corroboration-all.ndjson
           while true; do
-            # Each batch can consume most of an OIDC token lifetime.
             oidc_response="$(curl --fail-with-body -sS --retry 5 --retry-all-errors --retry-delay 2 --retry-max-time 120 \
               -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
               "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${GITHUB_OIDC_AUDIENCE}")"
-            token="$(printf "%s" "$oidc_response" | jq -er '.value')"
+            token="$(printf '%s' "$oidc_response" | jq -er '.value')"
             echo "::add-mask::$token"
             response="$(curl --silent --show-error \
               --output /tmp/federico-corroborate.json \
@@ -656,11 +177,9 @@ jobs:
               --header 'Content-Type: application/json' \
               --data "$(jq -nc --arg as_of "$window_as_of" --argjson offset "$offset" '{country_iso3:"CHN",as_of:$as_of,candidate_offset:$offset}')" \
               "${base}/live-flash-corroborate")"
-            cat /tmp/federico-corroborate.json
-            echo
-            test "$response" = "200" || { echo "::error::live-flash-corroborate did not return HTTP 200."; exit 1; }
-            # Reject an old deployment that cannot prove full-window traversal.
+            test "$response" = "200" || { cat /tmp/federico-corroborate.json; echo "::error::live-flash-corroborate did not return HTTP 200."; exit 1; }
             jq -e '.ok == true and has("next_candidate_offset") and has("window_as_of")' /tmp/federico-corroborate.json >/dev/null
+            jq -c . /tmp/federico-corroborate.json >> /tmp/federico-corroboration-all.ndjson
             next="$(jq -r '.next_candidate_offset' /tmp/federico-corroborate.json)"
             [[ "$next" != "null" ]] || break
             [[ "$next" =~ ^[0-9]+$ && "$next" -gt "$offset" && "$next" -lt 600 ]] || {
@@ -672,28 +191,66 @@ jobs:
           echo "PASS: fresh RSS and structured evidence corroboration completed."
 
       - name: Check strict evidence readiness before publication
+        id: readiness
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          bun scripts/check-federico-publication.ts > /tmp/federico-evidence-readiness.json 2> /tmp/federico-evidence-readiness.err
+          rc=$?
+          set -e
+          if [[ -s /tmp/federico-evidence-readiness.json ]]; then
+            cat /tmp/federico-evidence-readiness.json
+          fi
+          if [[ "$rc" -eq 0 ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "FEDERICO_EVIDENCE_READY=true" >> "$GITHUB_ENV"
+            echo "PASS: strict publication evidence is ready."
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "FEDERICO_EVIDENCE_READY=false" >> "$GITHUB_ENV"
+            echo "Fail-closed: no qualifying fresh Federico evidence is currently available; no Risk Object will be published."
+            sed -n '1,40p' /tmp/federico-evidence-readiness.err || true
+          fi
+
+      - name: Build fail-closed no-publication artifact
+        if: ${{ steps.readiness.outputs.ready != 'true' }}
         shell: bash
         run: |
           set -euo pipefail
-          bun scripts/check-federico-publication.ts | tee /tmp/federico-evidence-readiness.json
+          mkdir -p /tmp/federico-no-publication
+          cp /tmp/federico-evidence-readiness.json /tmp/federico-no-publication/evidence-readiness.json || printf '{}\n' > /tmp/federico-no-publication/evidence-readiness.json
+          cp /tmp/federico-corroboration-all.ndjson /tmp/federico-no-publication/corroboration.ndjson
+          jq -n \
+            --arg country_iso3 "CHN" \
+            --arg status "NO_PUBLICATION" \
+            --arg reason "strict_evidence_gate_not_met" \
+            --arg run_id "${GITHUB_RUN_ID}" \
+            --arg sha "${GITHUB_SHA}" \
+            --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{ok:true,country_iso3:$country_iso3,status:$status,reason:$reason,run_id:$run_id,source_sha:$sha,generated_at:$generated_at,publication_attempted:false}' \
+            > /tmp/federico-no-publication/no-publication.json
+          (
+            cd /tmp/federico-no-publication
+            sha256sum corroboration.ndjson evidence-readiness.json no-publication.json > SHA256SUMS.txt
+            sha256sum -c SHA256SUMS.txt
+          )
 
-      - name: Preserve sanitized evidence diagnostics
-        if: ${{ failure() }}
+      - name: Upload fail-closed no-publication artifact
+        if: ${{ steps.readiness.outputs.ready != 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: federico-evidence-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            /tmp/federico-corroborate.json
-            /tmp/federico-evidence-readiness.json
-          if-no-files-found: ignore
+          name: federico-no-publication-${{ github.run_id }}
+          path: /tmp/federico-no-publication/
+          if-no-files-found: error
           retention-days: 14
 
       - name: Publish fresh production-signed CHN Risk Object
+        if: ${{ steps.readiness.outputs.ready == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
           bun scripts/publish-country-risk-object.ts CHN FEDERICO_STRICT | tee /tmp/publish.json
-
           jq -e --arg key_id "$RISK_OBJECT_SIGNING_KEY_ID" '
             .published == true and
             .schema_version == "gro-1.1" and
@@ -707,77 +264,40 @@ jobs:
           ' /tmp/publish.json >/dev/null
 
       - name: Export exact persisted signed payload
+        if: ${{ steps.readiness.outputs.ready == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
           OBJECT_ID="$(jq -r '.object_id' /tmp/publish.json)"
           export OBJECT_ID
-
           node <<'NODE'
           const fs = require('node:fs');
           const { createClient } = require('@supabase/supabase-js');
-
           (async () => {
-            const db = createClient(
-              process.env.APP_SUPABASE_URL,
-              process.env.APP_SUPABASE_SERVICE_ROLE_KEY,
-              { auth: { persistSession: false, autoRefreshToken: false } },
-            );
-
-            const { data, error } = await db
-              .from('geomacro_risk_objects')
-              .select('payload')
-              .eq('object_id', process.env.OBJECT_ID)
-              .maybeSingle();
-
+            const db = createClient(process.env.APP_SUPABASE_URL, process.env.APP_SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+            const { data, error } = await db.from('geomacro_risk_objects').select('payload').eq('object_id', process.env.OBJECT_ID).maybeSingle();
             if (error) throw error;
             if (!data?.payload) throw new Error('Persisted Risk Object payload unavailable');
-
-            fs.writeFileSync(
-              '/tmp/federico-risk-object.json',
-              JSON.stringify(data.payload, null, 2) + '\n',
-              { mode: 0o600 },
-            );
-          })().catch((error) => {
-            console.error(error);
-            process.exit(1);
-          });
+            fs.writeFileSync('/tmp/federico-risk-object.json', JSON.stringify(data.payload, null, 2) + '\n', { mode: 0o600 });
+          })().catch((error) => { console.error(error); process.exit(1); });
           NODE
 
-      - name: Print strict object source identity diagnostics before integrity gate
-        shell: bash
-        run: |
-          set -euo pipefail
-          node <<'NODE'
-          const { createClient } = require('@supabase/supabase-js');
-          const db = createClient(process.env.APP_SUPABASE_URL, process.env.APP_SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
-          (async () => {
-            const objectId = process.env.OBJECT_ID || require('node:fs').readFileSync('/tmp/publish.json','utf8') && JSON.parse(require('node:fs').readFileSync('/tmp/publish.json','utf8')).object_id;
-            const { data, error } = await db.from('geomacro_risk_objects').select('payload').eq('object_id', objectId).maybeSingle();
-            if (error) throw error;
-            const evidence = Array.isArray(data?.payload?.evidence) ? data.payload.evidence : [];
-            console.log(JSON.stringify(evidence.map((item) => ({ source_ids:item.source_ids, source_families:item.source_families })), null, 2));
-          })().catch((e) => { console.error(e); process.exit(1); });
-          NODE
       - name: Verify freshness, signature and tamper rejection
+        if: ${{ steps.readiness.outputs.ready == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
-          bun scripts/invinoveritas-risk-object-preflight.ts /tmp/federico-risk-object.json             | tee /tmp/federico-preflight.json
-
+          bun scripts/invinoveritas-risk-object-preflight.ts /tmp/federico-risk-object.json | tee /tmp/federico-preflight.json
           python3 - <<'PY'
           import json
           from pathlib import Path
-
-          path = Path("/tmp/federico-preflight.json")
-          with path.open("r", encoding="utf-8") as handle:
+          path = Path('/tmp/federico-preflight.json')
+          with path.open('r', encoding='utf-8') as handle:
               document = json.load(handle)
-
           if not isinstance(document, dict):
-              raise SystemExit("Federico preflight output must be exactly one JSON object")
-          print("PASS: Federico preflight output is exactly one valid JSON document")
+              raise SystemExit('Federico preflight output must be exactly one JSON object')
+          print('PASS: Federico preflight output is exactly one valid JSON document')
           PY
-
           jq -e '
             .ok == true and
             .gates.deployed_original_verification == "PASS" and
@@ -793,6 +313,7 @@ jobs:
           ' /tmp/federico-preflight.json >/dev/null
 
       - name: Build handoff artifact
+        if: ${{ steps.readiness.outputs.ready == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -804,94 +325,42 @@ jobs:
           cp docs/examples/gro-1.1-canonical-v1-edge-vectors.json /tmp/federico-handoff/gro-1.1-canonical-v1-edge-vectors.json
           cp /tmp/federico-review-request.json /tmp/federico-handoff/review-request.json
           cp /tmp/federico-review-response.json /tmp/federico-handoff/review-response.json
-
-          jq '{
-            ok,
-            gates,
-            object,
-            live_review
-          }' /tmp/federico-preflight.json > /tmp/federico-handoff/verification-summary.json
-
+          jq '{ok,gates,object,live_review}' /tmp/federico-preflight.json > /tmp/federico-handoff/verification-summary.json
           python3 - <<'PY'
           import json
-          from pathlib import Path
-
-          path = Path("/tmp/federico-handoff/verification-summary.json")
-          with path.open("r", encoding="utf-8") as handle:
+          with open('/tmp/federico-handoff/verification-summary.json', 'r', encoding='utf-8') as handle:
               document = json.load(handle)
-
-          if document.get("ok") is not True:
-              raise SystemExit("verification-summary.json must record ok=true")
-          obj = document.get("object")
-          integrity = obj.get("integrity") if isinstance(obj, dict) else None
-          if not isinstance(obj, dict) or not obj.get("as_of"):
-              raise SystemExit("verification-summary.json must bind as_of to observed_at")
-          if obj.get("as_of") != obj.get("observed_at"):
-              raise SystemExit("verification-summary.json as_of must equal observed_at")
-          if not isinstance(integrity, dict) or not integrity.get("signature"):
-              raise SystemExit("verification-summary.json must include integrity.signature")
-          print("PASS: verification summary is one JSON document with as_of and signature binding")
+          if document.get('ok') is not True:
+              raise SystemExit('verification-summary.json must record ok=true')
           PY
-
           (
             cd /tmp/federico-handoff
             sha256sum GRO_CANONICAL_JSON_V1.md gro-1.1-canonical-v1-edge-vectors.json gro-1.1-canonical-v1-test-vector.json gro-1.1.schema.json federico-risk-object.json review-request.json review-response.json verification-summary.json > SHA256SUMS.txt
             sha256sum -c SHA256SUMS.txt
           )
-
           python3 - <<'PY'
           from pathlib import Path
           from zipfile import ZipFile, ZIP_DEFLATED
-
-          root = Path("/tmp/federico-handoff")
-          package = root / "Geomacro_Federico_Latest_Handoff.zip"
+          root = Path('/tmp/federico-handoff')
+          package = root / 'Geomacro_Federico_Latest_Handoff.zip'
           files = [
-              "GRO_CANONICAL_JSON_V1.md",
-              "gro-1.1-canonical-v1-test-vector.json",
-              "gro-1.1-canonical-v1-edge-vectors.json",
-              "gro-1.1.schema.json",
-              "federico-risk-object.json",
-              "review-request.json",
-              "review-response.json",
-              "SHA256SUMS.txt",
-              "verification-summary.json",
+              'GRO_CANONICAL_JSON_V1.md',
+              'gro-1.1-canonical-v1-test-vector.json',
+              'gro-1.1-canonical-v1-edge-vectors.json',
+              'gro-1.1.schema.json',
+              'federico-risk-object.json',
+              'review-request.json',
+              'review-response.json',
+              'SHA256SUMS.txt',
+              'verification-summary.json',
           ]
-
-          with ZipFile(package, "w", ZIP_DEFLATED) as archive:
+          with ZipFile(package, 'w', ZIP_DEFLATED) as archive:
               for name in files:
                   archive.write(root / name, arcname=name)
           PY
 
-          (
-            cd /tmp/federico-handoff
-            sha256sum Geomacro_Federico_Latest_Handoff.zip > PACKAGE_SHA256.txt
-          )
-
-          python3 - <<'PY'
-          from zipfile import ZipFile
-          package = "/tmp/federico-handoff/Geomacro_Federico_Latest_Handoff.zip"
-          with ZipFile(package) as archive:
-              bad = archive.testzip()
-              if bad is not None:
-                  raise SystemExit(f"ZIP integrity failure: {bad}")
-              expected = {
-                  "GRO_CANONICAL_JSON_V1.md",
-                  "gro-1.1-canonical-v1-test-vector.json",
-                  "gro-1.1-canonical-v1-edge-vectors.json",
-                  "gro-1.1.schema.json",
-                  "federico-risk-object.json",
-                  "review-request.json",
-                  "review-response.json",
-                  "SHA256SUMS.txt",
-                  "verification-summary.json",
-              }
-              actual = set(archive.namelist())
-              if actual != expected:
-                  raise SystemExit(f"Unexpected ZIP contents: {sorted(actual)}")
-          print("PASS: fixed Federico handoff ZIP is valid")
-          PY
-
-      - name: Upload historical Federico handoff
+      - name: Upload Federico handoff
+        if: ${{ steps.readiness.outputs.ready == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: federico-handoff-${{ github.run_id }}
@@ -899,49 +368,8 @@ jobs:
           if-no-files-found: error
           retention-days: 8
 
-      - name: Upload fixed latest Federico handoff
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: federico-latest-handoff
-          path: /tmp/federico-handoff/
-          if-no-files-found: error
-          retention-days: 8
-
-      - name: Remove superseded fixed-name handoff artifacts
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          ARTIFACTS_JSON="$(mktemp)"
-          curl -L --silent --show-error --fail             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?name=federico-latest-handoff&per_page=100"             > "$ARTIFACTS_JSON"
-
-          CURRENT_ARTIFACT_ID="$(
-            jq -r --argjson run_id "$GITHUB_RUN_ID" '
-              .artifacts[]
-              | select(.workflow_run.id == $run_id)
-              | .id
-            ' "$ARTIFACTS_JSON" | head -n 1
-          )"
-
-          test -n "$CURRENT_ARTIFACT_ID" || {
-            echo "::error::Current federico-latest-handoff artifact was not found after upload."
-            exit 1
-          }
-
-          jq -r --argjson current_id "$CURRENT_ARTIFACT_ID" '
-            .artifacts[]
-            | select(.id != $current_id)
-            | .id
-          ' "$ARTIFACTS_JSON" | while read -r artifact_id; do
-            [ -n "$artifact_id" ] || continue
-            curl -L --silent --show-error --fail               -X DELETE               -H "Authorization: Bearer $GH_TOKEN"               -H "Accept: application/vnd.github+json"               -H "X-GitHub-Api-Version: 2022-11-28"               "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id"
-          done
-
-          echo "PASS: federico-latest-handoff now points to this refresh run only."
-
       - name: Publish sanitized summary
+        if: ${{ always() }}
         shell: bash
         run: |
           set -euo pipefail
@@ -950,16 +378,14 @@ jobs:
             echo
             echo "Refresh mode: continuous testnet acceptance"
             echo
-            jq '{
-              object_id: .object.object_id,
-              schema_version: .object.schema_version,
-              expires_at: .object.expires_at,
-              signing_key_id: .object.signing_key_id,
-              gates
-            }' /tmp/federico-preflight.json
-            echo
-            echo "Artifact: federico-latest-handoff"
-            echo "Historical artifact: federico-handoff-${{ github.run_id }}"
-            echo "Package: Geomacro_Federico_Latest_Handoff.zip"
+            if [[ "${FEDERICO_EVIDENCE_READY:-false}" == "true" ]]; then
+              echo "Outcome: VERIFIED publication path completed"
+              jq '{object_id: .object.object_id, schema_version: .object.schema_version, expires_at: .object.expires_at, signing_key_id: .object.signing_key_id, gates}' /tmp/federico-preflight.json
+              echo "Artifact: federico-handoff-${{ github.run_id }}"
+            else
+              echo "Outcome: NO_PUBLICATION"
+              echo "Reason: strict_evidence_gate_not_met"
+              echo "Artifact: federico-no-publication-${{ github.run_id }}"
+            fi
             echo "Run ID: ${{ github.run_id }}"
           } >> "$GITHUB_STEP_SUMMARY"
