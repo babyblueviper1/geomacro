@@ -105,3 +105,21 @@ Use:
 `GET /api/risk-object-keys`
 
 The endpoint publishes the trusted verification-key registry, key lifecycle metadata, signature scheme and canonicalization identifier. The complete signed artifact should then be verified against the published key.
+
+## 9. Standalone independent verifier
+
+`scripts/verify-gro-independent.mjs` is a standalone consumer-side reference verifier. It deliberately imports no Geomacro application signing, canonicalization, or verification code. It reconstructs the canonical signable payload from this specification, resolves the signing key from the public registry instead of trusting the object's embedded public key, recomputes `payload_hash`, verifies Ed25519, and derives present-time `VERIFIED` or `EXPIRED` status from `expires_at`.
+
+Run the deterministic interoperability vectors with:
+
+```
+node scripts/verify-gro-independent.mjs --self-test
+```
+
+Verify a Risk Object against the live trust registry with:
+
+```
+node scripts/verify-gro-independent.mjs path/to/risk-object.json
+```
+
+A different registry endpoint may be supplied as the second argument for offline or partner-controlled test environments.
