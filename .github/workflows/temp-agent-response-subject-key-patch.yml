@@ -1,0 +1,52 @@
+name: Temporary Agent Response Subject Key Patch
+
+on:
+  push:
+    branches:
+      - fix/agent-response-subject-key
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.repository == 'blocknine0/geomacro'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout patch branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/agent-response-subject-key
+          persist-credentials: true
+          fetch-depth: 1
+
+      - name: Insert missing subject key helper once
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/lib/agent-query-response.server.ts')
+          source = path.read_text()
+          if 'function subjectKey(subject: AgentQueryPlan["subjects"][number])' in source:
+              raise SystemExit(0)
+          needle = '''type LoadedRiskObject = {\n  subject: AgentQueryPlan["subjects"][number];\n  object: NonNullable<Awaited<ReturnType<typeof loadCommercialRiskObjectForAgentQuery>>>;\n};\n\n'''
+          replacement = needle + '''function subjectKey(subject: AgentQueryPlan["subjects"][number]) {\n  return subject.type === "country"\n    ? `country:${subject.country_iso3}`\n    : `corridor:${subject.origin_country_iso3}>${subject.destination_country_iso3}`;\n}\n\n'''
+          if needle not in source:
+              raise SystemExit('Expected insertion point not found')
+          path.write_text(source.replace(needle, replacement, 1))
+          PY
+
+      - name: Commit exact patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- src/lib/agent-query-response.server.ts; then
+            echo 'No source patch needed.'
+            exit 0
+          fi
+          git config user.name 'Geomacro CI Patch'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/lib/agent-query-response.server.ts
+          git commit -m 'Define adaptive response subject key helper'
+          git push origin HEAD:fix/agent-response-subject-key
