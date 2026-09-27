@@ -5,6 +5,7 @@ import { requireGoatPilotAccess } from "../lib/goat-pilot-auth.server";
 import { requireRiskSupabase } from "../lib/risk-supabase.server";
 import { verifyPublicRiskObjectArtifact } from "../lib/risk-object-verification.server";
 import { createPublicSignedRiskObjectProjection } from "../lib/risk-object-public-projection.server";
+import { getRiskObjectByObjectId } from "../lib/risk-object-store.server";
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const CLIENT_REQUEST_ID_RE = /^[A-Za-z0-9._:-]{1,256}$/;
@@ -138,20 +139,17 @@ async function handlePost(request: Request) {
     return jsonResponse({ ok: false, error: "GOAT_RISK_OBJECT_REFERENCE_MISSING", execution_authorized: false }, 503);
   }
 
-  const { data: storedRiskObject, error: riskObjectError } = await db
-    .from("geomacro_risk_objects")
-    .select("object_id,payload")
-    .eq("object_id", objectId)
-    .maybeSingle();
-
-  if (riskObjectError) {
+  let storedRiskObject;
+  try {
+    storedRiskObject = await getRiskObjectByObjectId(objectId);
+  } catch {
     return jsonResponse({ ok: false, error: "RISK_OBJECT_LEDGER_UNAVAILABLE", execution_authorized: false }, 503);
   }
-  if (!storedRiskObject?.payload || storedRiskObject.object_id !== objectId) {
+  if (!storedRiskObject || storedRiskObject.object_id !== objectId) {
     return jsonResponse({ ok: false, error: "RISK_OBJECT_NOT_FOUND", execution_authorized: false }, 404);
   }
 
-  const deliveredRiskObject = createPublicSignedRiskObjectProjection(storedRiskObject.payload);
+  const deliveredRiskObject = createPublicSignedRiskObjectProjection(storedRiskObject);
 
   if (containsForbiddenPublicSourceKeys(deliveredRiskObject)) {
     return jsonResponse({ ok: false, error: "RISK_OBJECT_PUBLIC_PRIVACY_BOUNDARY_VIOLATION", execution_authorized: false }, 503);
