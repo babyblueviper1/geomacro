@@ -2,8 +2,7 @@ name: Geomacro Intelligence Orchestrator
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "7,22,37,52 * * * *"
+  # Emergency quota hold. Preserve workflow_dispatch for controlled recovery.
 
 permissions:
   contents: read
