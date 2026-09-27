@@ -20,6 +20,8 @@ on:
       - "scripts/audit-hot-topic-family-readiness.ts"
       - "scripts/agentic/verify-live-x402-prelaunch-availability.mjs"
       - "src/lib/hot-topic-taxonomy.ts"
+      - "src/lib/country-risk-publisher.server.ts"
+      - "src/lib/country-risk-commercial-eligibility.ts"
       - "supabase/migrations/**"
       - ".github/workflows/global-production-coverage-gate.yml"
   schedule:
