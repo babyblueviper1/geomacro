@@ -1,4 +1,5 @@
 name: GRO B2 Edge read canary
+# Status-only diagnostic for the pinned read canary.
 
 on:
   push:
