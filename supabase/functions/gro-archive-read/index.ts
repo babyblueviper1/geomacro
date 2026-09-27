@@ -11,10 +11,25 @@ async function hmac(key: Uint8Array | string, value: string): Promise<Uint8Array
 }
 
 Deno.serve(async (request: Request) => {
-  const role = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (request.method !== "POST" || !role ||
-      request.headers.get("authorization") !== `Bearer ${role}`) {
+  if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+  const candidate = request.headers.get("apikey");
+  if (!candidate || request.headers.get("authorization") !== `Bearer ${candidate}`) {
     return new Response("Unauthorized", { status: 401 });
+  }
+  // PostgREST resolves both legacy service-role JWTs and newer secret API keys
+  // to a database role. Only service_role may execute this invoker RPC.
+  const verified = await fetch(
+    "https://ldpwajisioljyjtojvfx.supabase.co/rest/v1/rpc/internal_gro_archive_reader_authorized",
+    {
+      method: "POST",
+      headers: { apikey: candidate, authorization: `Bearer ${candidate}`,
+        "content-type": "application/json" },
+      body: "{}",
+      signal: AbortSignal.timeout(5_000),
+    },
+  ).catch(() => null);
+  if (!verified?.ok || (await verified.text()).trim() !== "true") {
+    return new Response("Forbidden", { status: 403 });
   }
   try {
     const { object_id: id } = await request.json();
