@@ -1,0 +1,45 @@
+name: B2 archive one-fragment canary
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/b2-archive-canary.yml]
+  workflow_dispatch:
+    inputs:
+      fragment_id:
+        description: Verified manifest UUID to copy and read back
+        required: true
+        default: adf4cc85-5ed4-45eb-9092-dc1fc132c8f4
+
+permissions:
+  contents: read
+
+concurrency:
+  group: geomacro-b2-archive-canary
+  cancel-in-progress: false
+
+jobs:
+  copy_and_verify:
+    if: ${{ github.repository == 'blocknine0/geomacro' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      APP_SUPABASE_URL: ${{ secrets.APP_SUPABASE_URL }}
+      APP_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      B2_S3_ENDPOINT: https://s3.us-east-005.backblazeb2.com
+      B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+      B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Copy one compressed fragment and verify readback
+        env:
+          CANARY_FRAGMENT_ID: ${{ inputs.fragment_id || 'adf4cc85-5ed4-45eb-9092-dc1fc132c8f4' }}
+        run: node scripts/ops/b2-archive-canary.mjs "$CANARY_FRAGMENT_ID"

@@ -1,0 +1,36 @@
+{
+  "version": "1.0",
+  "mode": "private_opt_in",
+  "price_usdc": "0.05",
+  "successful_paid_delivery_target": 10000,
+  "category_policy": {
+    "GEOPOLITICS": {
+      "topics": ["conflict_geopolitics", "sanctions_restrictions", "political_governance", "hot_topics"],
+      "preferred_source_families": ["government_official", "un_security_council", "imo_msi", "ukmto", "uk_sanctions_list", "eu_sanctions_consolidated"],
+      "discovery_only": ["gdelt_v2", "gdelt_gal", "telegram_osint_geopolitics"],
+      "maximum_extra_polls_per_day": 24
+    },
+    "MACRO": {
+      "topics": ["macro_risk", "fx_external_risk", "sovereign_risk", "banking_financial_system"],
+      "preferred_source_families": ["national_statistics", "central_bank", "imf_sdmx", "world_bank_indicators", "oecd_sdmx", "ecb_sdmx"],
+      "discovery_only": ["telegram_osint_macro"],
+      "maximum_extra_polls_per_day": 6
+    },
+    "CRITICAL_MINERALS": {
+      "topics": ["critical_minerals"],
+      "preferred_source_families": ["national_minerals_authority", "usgs_mcs", "usgs_mrp", "bgs_world_minerals_statistics", "un_comtrade_minerals"],
+      "discovery_only": ["telegram_osint_minerals"],
+      "maximum_extra_polls_per_day": 2
+    }
+  },
+  "automation_boundaries": {
+    "minimum_distinct_external_buyers_for_demand_claim": 2,
+    "require_commercial_rights": true,
+    "require_live_delivery_eligibility": true,
+    "require_independent_publisher_for_corroboration": true,
+    "allow_agent_to_change_price": false,
+    "allow_agent_to_activate_source": false,
+    "allow_agent_to_change_payment_or_freshness_gates": false,
+    "allow_agent_to_send_marketing_messages": false
+  }
+}
