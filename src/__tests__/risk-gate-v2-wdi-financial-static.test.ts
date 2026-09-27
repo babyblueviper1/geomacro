@@ -12,6 +12,13 @@ const migration = readFileSync(
   ),
   "utf8",
 );
+const latestViewIndex = readFileSync(
+  new URL(
+    "../../supabase/migrations/982_world_bank_latest_view_index.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 describe("Risk Gate v2 governed WDI financial inputs", () => {
   it("ingests the reviewed reserve, external-balance and banking indicators", () => {
@@ -31,5 +38,20 @@ describe("Risk Gate v2 governed WDI financial inputs", () => {
     expect(migration).toContain("o.commercial_eligibility_status = 'VERIFIED'");
     expect(migration).toContain("revoke all on public.live_world_bank_indicator_latest");
     expect(migration).toContain("grant select on public.live_world_bank_indicator_latest");
+  });
+
+  it("keeps the latest WDI DISTINCT ON path index-backed with the same eligibility boundary", () => {
+    expect(latestViewIndex).toContain(
+      "create index if not exists live_external_observations_world_bank_latest_idx",
+    );
+    expect(latestViewIndex).toContain("country_iso3");
+    expect(latestViewIndex).toContain("metric");
+    expect(latestViewIndex).toContain("observed_at desc nulls last");
+    expect(latestViewIndex).toContain("ingested_at desc");
+    expect(latestViewIndex).toContain("normalized_hash desc");
+    expect(latestViewIndex).toContain("source_id = 'world_bank_indicators'");
+    expect(latestViewIndex).toContain("quality_status = 'VERIFIED'");
+    expect(latestViewIndex).toContain("commercial_eligibility_status = 'VERIFIED'");
+    expect(latestViewIndex).toContain("value_numeric is not null");
   });
 });
