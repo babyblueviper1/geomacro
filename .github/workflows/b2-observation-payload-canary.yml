@@ -1,0 +1,44 @@
+name: B2 observation raw payload archive canary
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/b2-observation-payload-canary.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: geomacro-b2-observation-archive
+  cancel-in-progress: false
+
+jobs:
+  archive_one_and_restore:
+    if: ${{ github.repository == 'blocknine0/geomacro' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      APP_SUPABASE_URL: ${{ secrets.APP_SUPABASE_URL }}
+      APP_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      B2_S3_ENDPOINT: https://s3.us-east-005.backblazeb2.com
+      B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+      B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+      OBS_ARCHIVE_LIMIT: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Archive exactly one eligible observation and verify B2 restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/ops/b2-archive-observation-payload-batch.mjs > canary.jsonl
+          cat canary.jsonl
+          id="$(jq -r 'select(.archive_verified == true) | .observation_id' canary.jsonl)"
+          test -n "$id"
+          OBS_RESTORE_ID="$id" node scripts/ops/b2-restore-observation-payload.mjs
