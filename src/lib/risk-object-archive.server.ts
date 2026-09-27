@@ -49,6 +49,15 @@ async function downloadPrivateB2Archive(objectId: string): Promise<Buffer> {
   return Buffer.from(await response.arrayBuffer());
 }
 
+async function downloadEdgeArchive(objectId: string): Promise<Buffer> {
+  const db = requireRiskSupabase();
+  const { data, error } = await db.functions.invoke("gro-archive-read", {
+    body: { object_id: objectId },
+  });
+  if (error || !(data instanceof Blob)) throw new Error("RISK_OBJECT_ARCHIVE_UNAVAILABLE");
+  return Buffer.from(await data.arrayBuffer());
+}
+
 export async function loadRiskObjectPayload(row: ArchivedRiskObjectRow): Promise<GeomacroRiskObject> {
   if (row.payload) return row.payload as GeomacroRiskObject;
   if (!/^gro_[A-Za-z0-9_]+$/.test(row.object_id) ||
@@ -60,7 +69,7 @@ export async function loadRiskObjectPayload(row: ArchivedRiskObjectRow): Promise
   const db = requireRiskSupabase();
   const { data, error } = await db.storage.from("geomacro-live-intelligence").download(row.archive_key);
   const compressed = error || !data
-    ? await downloadPrivateB2Archive(row.object_id)
+    ? await downloadEdgeArchive(row.object_id)
     : Buffer.from(await data.arrayBuffer());
   if (compressed.length > 2_000_000) throw new Error("RISK_OBJECT_ARCHIVE_TOO_LARGE");
   if (sha256(compressed) !== row.archive_sha256) {
