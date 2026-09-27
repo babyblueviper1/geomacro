@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { writeFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
+import { createB2Client } from "./ops/b2-s3-client.mjs";
 
 const AUTHORITATIVE_PROJECT_REF = "ldpwajisioljyjtojvfx";
 const SOURCE_KEY = "gdelt_gal";
@@ -413,16 +414,28 @@ async function main() {
     const hh = latestStamp.slice(8, 10);
     const objectPath = `live/v1/${yyyy}/${mm}/${dd}/${hh}/gdelt-gal/${latestStamp}-${compressedSha256.slice(0, 16)}.ndjson.gz`;
 
-    const { error: uploadError } = await supabase.storage.from(BUCKET).upload(objectPath, compressedBytes, {
-      contentType: "application/gzip",
-      upsert: false,
-    });
-    if (uploadError) throw uploadError;
-
-    const { data: downloaded, error: downloadError } = await supabase.storage.from(BUCKET).download(objectPath);
-    if (downloadError || !downloaded) throw downloadError ?? new Error("Storage read-back failed");
-    const readBackSha256 = sha256Hex(Buffer.from(await downloaded.arrayBuffer()));
-    if (readBackSha256 !== compressedSha256) throw new Error("Storage verification mismatch");
+    const b2Primary = process.env.B2_GDELT_PRIMARY === "1";
+    const fragmentBucket = b2Primary ? "geomacro-private-archive" : BUCKET;
+    const fragmentPath = b2Primary ? `geomacro-evidence/v1/${objectPath}` : objectPath;
+    if (b2Primary) {
+      const b2 = createB2Client({ endpointUrl: process.env.B2_S3_ENDPOINT,
+        accessKey: process.env.B2_KEY_ID, secretKey: process.env.B2_APPLICATION_KEY,
+        bucket: fragmentBucket });
+      await b2.put(fragmentPath, compressedBytes);
+      if (sha256Hex(await b2.get(fragmentPath)) !== compressedSha256) {
+        throw new Error("B2 fragment read-back verification mismatch");
+      }
+    } else {
+      const { error: uploadError } = await supabase.storage.from(BUCKET).upload(objectPath, compressedBytes, {
+        contentType: "application/gzip", upsert: false,
+      });
+      if (uploadError) throw uploadError;
+      const { data: downloaded, error: downloadError } = await supabase.storage.from(BUCKET).download(objectPath);
+      if (downloadError || !downloaded) throw downloadError ?? new Error("Storage read-back failed");
+      if (sha256Hex(Buffer.from(await downloaded.arrayBuffer())) !== compressedSha256) {
+        throw new Error("Storage verification mismatch");
+      }
+    }
 
     const topicSet = new Set();
     for (const item of accepted) for (const topic of item.record.q ?? []) topicSet.add(String(topic));
@@ -430,8 +443,8 @@ async function main() {
     const { data: manifest, error: manifestError } = await supabase.from("live_fragment_manifest").insert({
       source_key: SOURCE_KEY,
       stream_key: STREAM_KEY,
-      storage_bucket: BUCKET,
-      object_path: objectPath,
+      storage_bucket: fragmentBucket,
+      object_path: fragmentPath,
       schema_version: SCHEMA_VERSION,
       compression: "gzip",
       period_start: periodStart.toISOString(),
@@ -448,7 +461,7 @@ async function main() {
       source_domains: [],
       sealed_at: nowIso,
       verified_at: nowIso,
-      verification_method: "storage-readback-sha256",
+      verification_method: b2Primary ? "b2-readback-sha256" : "storage-readback-sha256",
     }).select("id").single();
     if (manifestError) throw manifestError;
 
