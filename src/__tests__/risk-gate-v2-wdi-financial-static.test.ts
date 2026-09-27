@@ -14,7 +14,7 @@ const migration = readFileSync(
 );
 const latestViewIndex = readFileSync(
   new URL(
-    "../../supabase/migrations/982_world_bank_latest_view_index.sql",
+    "../../supabase/migrations/983_world_bank_latest_view_index.sql",
     import.meta.url,
   ),
   "utf8",
