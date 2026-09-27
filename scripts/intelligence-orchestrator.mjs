@@ -115,6 +115,7 @@ const TASKS = [
     steps: [
       ["bash", ["-lc", "bun scripts/sync-country-raw-source-mesh.mjs | tee country-raw-source-sync.json"], "."],
       ["node", ["scripts/drain-live-structure.mjs", "--fragment-ids-file", "country-raw-source-sync.json"], "."],
+      ["bash", ["-lc", "RECONCILE_SOURCE_KEYS=country_raw_web_mesh RECONCILE_LOOKBACK_MINUTES=120 node scripts/reconcile-structured-event-commercial-rights.mjs"], "."],
       ["bun", ["scripts/audit-global-raw-source-coverage.mjs"], "."],
       ["bun", ["scripts/audit-global-raw-source-runtime.mjs"], "."],
     ],
@@ -261,354 +262,254 @@ async function refreshOidcToken(audience) {
   return true;
 }
 
-function runStep(command, args, cwd, timeoutMs) {
-  return new Promise((resolve) => {
-    const child = spawn(command, args, {
-      cwd,
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: true,
-    });
-
-    const killProcessGroup = (signal) => {
-      if (!child.pid) return;
-      try {
-        process.kill(-child.pid, signal);
-      } catch {
-        try {
-          child.kill(signal);
-        } catch {
-          // Child already exited.
-        }
-      }
-    };
-
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-
-    child.stdout.on("data", (chunk) => {
-      const text = String(chunk);
-      stdout += text;
-      // Child task output is diagnostic stream data. Keep stdout reserved for the
-      // single machine-readable orchestrator summary consumed by the workflow.
-      process.stderr.write(text);
-    });
-
-    child.stderr.on("data", (chunk) => {
-      const text = String(chunk);
-      stderr += text;
-      process.stderr.write(text);
-    });
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      killProcessGroup("SIGTERM");
-      setTimeout(() => killProcessGroup("SIGKILL"), 10_000).unref();
-    }, timeoutMs);
-
-    child.on("close", (code, signal) => {
-      clearTimeout(timer);
-      resolve({
-        ok: code === 0 && !timedOut,
-        code,
-        signal,
-        timed_out: timedOut,
-        stdout: stdout.slice(-6000),
-        stderr: stderr.slice(-6000),
-      });
-    });
-
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      resolve({
-        ok: false,
-        code: null,
-        signal: null,
-        timed_out: false,
-        stdout: stdout.slice(-6000),
-        stderr: (stderr + "\n" + String(error?.message ?? error)).slice(-6000),
-      });
-    });
-  });
+function nextDueFrom(task, attemptMs, success) {
+  return success
+    ? new Date(alignedDueAt(task, attemptMs)).toISOString()
+    : new Date(attemptMs + RETRY_SECONDS * 1000).toISOString();
 }
 
-async function loadStates() {
-  const { data, error } = await db
-    .from("live_ingestion_cursors")
-    .select("stream_key,cursor,status,last_attempt_at,last_success_at,last_item_at,consecutive_failures,updated_at")
-    .eq("source_key", STATE_SOURCE)
-    .like("stream_key", `${STATE_PREFIX}%`);
-
-  if (error) throw error;
-  return new Map((data ?? []).map((row) => [String(row.stream_key), row]));
+function taskKey(task) {
+  return `${STATE_PREFIX}${task.key}`;
 }
 
-async function upsertState(task, state) {
-  const payload = {
-    source_key: STATE_SOURCE,
-    stream_key: STATE_PREFIX + task.key,
-    cursor: state.cursor ?? {},
-    status: state.status ?? "unknown",
-    last_attempt_at: state.last_attempt_at ?? null,
-    last_success_at: state.last_success_at ?? null,
-    last_item_at: state.last_item_at ?? null,
-    consecutive_failures: Number(state.consecutive_failures ?? 0),
-    updated_at: new Date().toISOString(),
-  };
-  const { error } = await db.from("live_ingestion_cursors").upsert(payload, {
-    onConflict: "source_key,stream_key",
-  });
-  if (error) throw error;
-}
-
-function normalizedState(task, row, nowMs) {
-  const cursor = row?.cursor && typeof row.cursor === "object" ? row.cursor : {};
-  let nextDueAt = cursor.next_due_at;
-  if (!nextDueAt || !Number.isFinite(Date.parse(nextDueAt))) {
-    nextDueAt = new Date(alignedDueAt(task, nowMs)).toISOString();
-  }
+function normalizeState(task, row, nowMs) {
+  const payload = row?.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+    ? structuredClone(row.payload)
+    : {};
+  const cursor = payload?.cursor && typeof payload.cursor === "object" && !Array.isArray(payload.cursor)
+    ? payload.cursor
+    : {};
   return {
+    ...payload,
+    source: STATE_SOURCE,
+    task: task.key,
     cursor: {
       ...cursor,
-      cadence_seconds: task.cadenceSeconds,
-      offset_seconds: task.offsetSeconds,
-      next_due_at: nextDueAt,
-      scheduler_source: CONTROL_SOURCE,
+      next_due_at:
+        typeof cursor.next_due_at === "string" && cursor.next_due_at
+          ? cursor.next_due_at
+          : new Date(alignedDueAt(task, nowMs - task.cadenceSeconds * 1000)).toISOString(),
     },
-    status: row?.status ?? "unknown",
-    last_attempt_at: row?.last_attempt_at ?? null,
-    last_success_at: row?.last_success_at ?? null,
-    consecutive_failures: Number(row?.consecutive_failures ?? 0),
-    last_error: cursor.last_error ?? null,
   };
+}
+
+function shouldBootstrapState(row) {
+  if (!row) return true;
+  if (row.last_attempt_at || row.last_success_at) return false;
+  const cursor = row?.payload?.cursor;
+  if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)) return true;
+  if (cursor.skipped_reason === "task_disabled_by_configuration") return false;
+  return !Object.prototype.hasOwnProperty.call(cursor, "bootstrap_pending");
 }
 
 function bootstrapStateForTask(task, nowMs) {
-  const state = normalizedState(task, null, nowMs);
-
-  // Missing or never-attempted seed state must never defer first-run recovery
-  // behind the next aligned cadence. MAX_TASKS_PER_TICK bounds bootstrap execution.
+  const state = normalizeState(task, null, nowMs);
   state.cursor.next_due_at = new Date(nowMs).toISOString();
   state.cursor.bootstrap_pending = true;
   return state;
 }
 
-function shouldBootstrapState(row) {
-  if (!row) return true;
-  const cursor = row?.cursor && typeof row.cursor === "object" ? row.cursor : {};
-
-  // Recover rows created by the pre-fix bootstrap logic, but never re-bootstrap
-  // a task that has already been attempted or explicitly disabled.
-  if (cursor.bootstrap_pending === true) return true;
-  if (cursor.bootstrap_pending === false) return false;
-  if (row.status !== "unknown") return false;
-  if (row.last_attempt_at || row.last_success_at) return false;
-  if (cursor.skipped_reason === "task_disabled_by_configuration") return false;
-  return true;
+async function persistState(task, state, update = {}) {
+  const payload = {
+    ...state,
+    source: STATE_SOURCE,
+    task: task.key,
+    cursor: {
+      ...(state.cursor ?? {}),
+      ...(update.cursor ?? {}),
+    },
+    ...(update.payload ?? {}),
+  };
+  const row = {
+    source_id: taskKey(task),
+    source_kind: CONTROL_SOURCE,
+    payload,
+    last_attempt_at: update.last_attempt_at ?? null,
+    last_success_at: update.last_success_at ?? null,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await db
+    .from("live_intelligence_scheduler_state")
+    .upsert(row, { onConflict: "source_id" });
+  if (error) throw error;
+  return payload;
 }
 
-async function runTask(task, state) {
-  const now = new Date().toISOString();
-  state.cursor.bootstrap_pending = false;
+async function runStep([command, args, cwd], timeoutMs) {
+  return await new Promise((resolve) => {
+    const child = spawn(command, args, {
+      cwd,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      setTimeout(() => child.kill("SIGKILL"), 5000).unref();
+    }, timeoutMs);
+    child.stdout.on("data", (chunk) => {
+      const text = chunk.toString();
+      stdout += text;
+      process.stderr.write(text);
+    });
+    child.stderr.on("data", (chunk) => {
+      const text = chunk.toString();
+      stderr += text;
+      process.stderr.write(text);
+    });
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      resolve({ ok: code === 0, code, signal, stdout, stderr });
+    });
+  });
+}
 
-  if (typeof task.enabled === "function" && !task.enabled()) {
-    state.cursor.next_due_at = new Date(alignedDueAt(task, Date.now())).toISOString();
-    state.cursor.skipped_reason = "task_disabled_by_configuration";
-    await upsertState(task, { ...state, status: "unknown" });
-    return { task: task.key, status: "disabled" };
-  }
-
-  if (!hasAllEnv(task.requiredEnv)) {
-    state.cursor.next_due_at = new Date(Date.now() + RETRY_SECONDS * 1000).toISOString();
-    state.cursor.skipped_reason = "required_environment_not_present";
-    await upsertState(task, { ...state, status: "degraded", last_attempt_at: now });
-    return { task: task.key, status: "degraded", reason: "required_environment_not_present" };
-  }
-
-  if (task.oidcAudience) {
-    const tokenReady = await refreshOidcToken(task.oidcAudience);
-    if (!tokenReady) {
-      state.status = "degraded";
-      state.consecutive_failures += 1;
-      state.cursor.last_error = "OIDC_TOKEN_REFRESH_FAILED";
-      state.cursor.retry_pending = true;
-      state.cursor.next_due_at = new Date(Date.now() + RETRY_SECONDS * 1000).toISOString();
-      await upsertState(task, state);
-      return { task: task.key, status: "degraded", reason: "OIDC_TOKEN_REFRESH_FAILED" };
-    }
-  }
-
-  state.cursor.next_due_at = new Date(Date.now() + RETRY_SECONDS * 1000).toISOString();
-  state.cursor.retry_pending = true;
-  state.last_attempt_at = now;
-  await upsertState(task, state);
-
-  const started = Date.now();
-  const maxAttempts = Math.max(1, Math.min(3, Number(task.maxAttempts ?? 1)));
-  const retryBackoffMs = Math.max(0, Math.min(30_000, Number(task.retryBackoffMs ?? 5000)));
-  let failedStep = null;
-  let result = null;
-  let taskAttempts = 0;
-
-  for (let taskAttempt = 1; taskAttempt <= maxAttempts; taskAttempt += 1) {
-    taskAttempts = taskAttempt;
-    failedStep = null;
-    result = null;
-
-    for (let index = 0; index < task.steps.length; index += 1) {
-      const [command, args, cwd] = task.steps[index];
-      result = await runStep(command, args, cwd, task.timeoutMs ?? TASK_TIMEOUT_MS);
-      if (!result.ok) {
-        failedStep = {
-          index,
-          command,
-          args,
-          cwd,
-          exit_code: result.code,
-          signal: result.signal,
-          timed_out: result.timed_out,
-          stderr: result.stderr,
-          task_attempt: taskAttempt,
-        };
-        break;
+async function runTask(task) {
+  const timeoutMs = task.timeoutMs ?? TASK_TIMEOUT_MS;
+  const maxAttempts = Math.max(1, Number(task.maxAttempts ?? 1));
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    let attemptOk = true;
+    const stepResults = [];
+    if (!(await refreshOidcToken(task.oidcAudience))) {
+      attemptOk = false;
+      stepResults.push({ ok: false, reason: "oidc_token_unavailable" });
+    } else {
+      for (const step of task.steps) {
+        const result = await runStep(step, timeoutMs);
+        stepResults.push(result);
+        if (!result.ok) {
+          attemptOk = false;
+          break;
+        }
       }
     }
-
-    if (!failedStep) break;
-    if (taskAttempt < maxAttempts) {
-      await sleep(retryBackoffMs * taskAttempt);
-    }
+    if (attemptOk) return { ok: true, attempts: attempt, steps: stepResults };
+    if (attempt < maxAttempts) await sleep(Number(task.retryBackoffMs ?? 2000) * attempt);
   }
+  return { ok: false, attempts: maxAttempts, steps: [] };
+}
 
-  if (failedStep) {
-    const errorText = JSON.stringify(failedStep).slice(0, 6000);
-    const diagnosticText = [
-      result?.stdout ?? "",
-      result?.stderr ?? "",
-      errorText,
-    ].join("\n");
-    const failureClass = diagnosticText.match(
-      /(?:^|\n)GDELT_GAL_FAILURE_CLASS=([A-Z0-9_]+)/,
-    )?.[1] ?? null;
-
-    state.status = "degraded";
-    state.consecutive_failures += 1;
-    state.cursor.last_error = errorText;
-    state.cursor.last_failure_class = failureClass;
-    state.cursor.retry_pending = true;
-    await upsertState(task, state);
-    return {
-      task: task.key,
-      status: "degraded",
-      duration_ms: Date.now() - started,
-      failed_step: failedStep,
-      failure_class: failureClass,
-      attempts: taskAttempts,
-    };
-  }
-
-  state.status = "healthy";
-  state.consecutive_failures = 0;
-  state.last_success_at = new Date().toISOString();
-  state.cursor.last_error = null;
-  state.cursor.retry_pending = false;
-  state.cursor.last_run_duration_ms = Date.now() - started;
-  state.cursor.next_due_at = new Date(alignedDueAt(task, Date.now())).toISOString();
-  await upsertState(task, state);
-
-  return {
-    task: task.key,
-    status: "succeeded",
-    duration_ms: Date.now() - started,
-    next_due_at: state.cursor.next_due_at,
-    attempts: taskAttempts,
-  };
+async function loadStateRows() {
+  const { data, error } = await db
+    .from("live_intelligence_scheduler_state")
+    .select("source_id,payload,last_attempt_at,last_success_at")
+    .like("source_id", `${STATE_PREFIX}%`);
+  if (error) throw error;
+  return new Map((data ?? []).map((row) => [row.source_id, row]));
 }
 
 async function main() {
-  const nowMs = Date.now();
-  const now = new Date(nowMs).toISOString();
-  const states = await loadStates();
-
-  // Seed missing task state as immediately due. This lets a first heartbeat
-  // repair stale production freshness instead of waiting for a future slot.
-  // MAX_TASKS_PER_TICK prevents the bootstrap from becoming a thundering herd.
+  const startMs = Date.now();
+  const rows = await loadStateRows();
+  const due = [];
   for (const task of TASKS) {
-    const key = STATE_PREFIX + task.key;
-    if (shouldBootstrapState(states.get(key))) {
-      const state = bootstrapStateForTask(task, nowMs);
-      await upsertState(task, state);
-      states.set(key, {
-        stream_key: key,
-        cursor: state.cursor,
-        status: state.status,
-        last_attempt_at: null,
-        last_success_at: null,
-        consecutive_failures: 0,
-      });
+    const row = rows.get(taskKey(task));
+    const enabled = typeof task.enabled === "function" ? task.enabled() : true;
+    let state;
+    if (shouldBootstrapState(row)) {
+      state = bootstrapStateForTask(task, startMs);
+      await persistState(task, state, { cursor: state.cursor });
+    } else {
+      state = normalizeState(task, row, startMs);
     }
-  }
-
-  const dueAll = orderDueTasks(
-    TASKS
-      .map((task) => ({ task, state: normalizedState(task, states.get(STATE_PREFIX + task.key), nowMs) }))
-      .filter(({ task, state }) => {
-        if (typeof task.enabled === "function" && !task.enabled()) return false;
-        if (TASK_ALLOWLIST.size && !TASK_ALLOWLIST.has(task.key)) return false;
-        if (!FORCE_TASKS.has(task.key) && !isPast(state.cursor.next_due_at, nowMs)) return false;
-        return true;
-      }),
-  );
-  const due = dueAll.slice(0, MAX_TASKS_PER_TICK);
-  const executionStartedAt = Date.now();
-  const executionDeadlineAt = executionStartedAt + HEARTBEAT_BUDGET_MS;
-
-  const results = [];
-  const budgetDeferredTasks = [];
-  for (const item of due) {
-    const remainingMs = executionDeadlineAt - Date.now();
-    const taskTimeoutMs = item.task.timeoutMs ?? TASK_TIMEOUT_MS;
-    if (!taskFitsWithinBudget(taskTimeoutMs, remainingMs, HEARTBEAT_RESERVE_MS)) {
-      budgetDeferredTasks.push({
-        task: item.task.key,
-        status: "deferred",
-        reason: "HEARTBEAT_EXECUTION_BUDGET",
-        required_ms: taskTimeoutMs + HEARTBEAT_RESERVE_MS,
-        remaining_ms: Math.max(0, remainingMs),
-      });
+    if (!enabled) {
+      state.cursor.next_due_at = new Date(alignedDueAt(task, startMs)).toISOString();
+      state.cursor.skipped_reason = "task_disabled_by_configuration";
+      state.cursor.bootstrap_pending = false;
+      await persistState(task, state, { cursor: state.cursor });
       continue;
     }
-    results.push(await runTask(item.task, item.state));
+    if (FORCE_TASKS.has(task.key) || isPast(state.cursor.next_due_at, startMs)) {
+      due.push({ task, state, forced: FORCE_TASKS.has(task.key) });
+    }
   }
 
-  const deferredCount = Math.max(0, dueAll.length - MAX_TASKS_PER_TICK);
+  const orderedDue = orderDueTasks(due);
   const summary = {
     ok: true,
-    orchestrator: CONTROL_SOURCE,
-    generated_at: now,
     project_ref: PROJECT_REF,
-    heartbeat_seconds: 900,
-    max_tasks_per_tick: MAX_TASKS_PER_TICK,
-    task_allowlist: [...TASK_ALLOWLIST],
-    force_tasks: [...FORCE_TASKS],
-    due_task_count: due.length,
-    results,
-    source_failures_are_recorded_as_degraded: true,
-    scheduler_internal_failures_remain_fail_closed: true,
+    started_at: new Date(startMs).toISOString(),
+    selected: [],
+    skipped: [],
     bootstrap_seeds_are_immediately_due: true,
-    deferred_count: deferredCount,
-    heartbeat_budget_ms: HEARTBEAT_BUDGET_MS,
-    heartbeat_reserve_ms: HEARTBEAT_RESERVE_MS,
-    execution_elapsed_ms: Date.now() - executionStartedAt,
-    budget_deferred_tasks: budgetDeferredTasks,
+    scheduler_note: "MAX_TASKS_PER_TICK prevents the bootstrap from becoming a thundering herd",
   };
 
+  let completed = 0;
+  for (const item of orderedDue) {
+    if (completed >= MAX_TASKS_PER_TICK) {
+      summary.skipped.push({ task: item.task.key, reason: "max_tasks_per_tick" });
+      continue;
+    }
+    const elapsed = Date.now() - startMs;
+    const timeoutMs = item.task.timeoutMs ?? TASK_TIMEOUT_MS;
+    if (!taskFitsWithinBudget({
+      elapsedMs: elapsed,
+      timeoutMs,
+      budgetMs: HEARTBEAT_BUDGET_MS,
+      reserveMs: HEARTBEAT_RESERVE_MS,
+    })) {
+      summary.skipped.push({ task: item.task.key, reason: "heartbeat_budget" });
+      continue;
+    }
+    const task = item.task;
+    const state = item.state;
+    const attemptMs = Date.now();
+    state.cursor.bootstrap_pending = false;
+    if (!hasAllEnv(task.requiredEnv)) {
+      state.cursor.next_due_at = new Date(attemptMs + RETRY_SECONDS * 1000).toISOString();
+      state.cursor.last_error = "missing_required_env";
+      state.cursor.consecutive_failures = Number(state.cursor.consecutive_failures ?? 0) + 1;
+      await persistState(task, state, {
+        last_attempt_at: new Date(attemptMs).toISOString(),
+        cursor: state.cursor,
+      });
+      summary.ok = false;
+      summary.selected.push({ task: task.key, ok: false, reason: "missing_required_env" });
+      completed += 1;
+      continue;
+    }
+
+    const result = await runTask(task);
+    const success = result.ok;
+    state.cursor.next_due_at = nextDueFrom(task, attemptMs, success);
+    state.cursor.last_error = success ? null : "task_failed";
+    state.cursor.retry_pending = !success;
+    state.cursor.consecutive_failures = success
+      ? 0
+      : Number(state.cursor.consecutive_failures ?? 0) + 1;
+    if (!success && task.key === "gdelt_gal") {
+      const detail = result.steps?.find((step) => step && step.ok === false);
+      const text = `${detail?.stderr ?? ""}\n${detail?.stdout ?? ""}`;
+      const failureClass = text.includes("WORLD_BANK") || text.includes("world bank")
+        ? "world_bank_dependency"
+        : text.includes("timeout") || text.includes("ETIMEDOUT")
+          ? "network_timeout"
+          : "unknown";
+      state.cursor.GDELT_GAL_FAILURE_CLASS = failureClass;
+      state.cursor.failure_class = failureClass;
+      if (state.cursor.consecutive_failures >= 2) state.cursor.status = "degraded";
+    } else if (success) {
+      state.cursor.failure_class = null;
+      state.cursor.status = "healthy";
+    }
+    await persistState(task, state, {
+      last_attempt_at: new Date(attemptMs).toISOString(),
+      last_success_at: success ? new Date().toISOString() : null,
+      cursor: state.cursor,
+    });
+    summary.ok = summary.ok && success;
+    summary.selected.push({ task: task.key, ok: success, attempts: result.attempts });
+    completed += 1;
+  }
+
+  summary.completed_at = new Date().toISOString();
   console.log(JSON.stringify(summary, null, 2));
+  if (!summary.ok) process.exitCode = 1;
 }
 
 main().catch((error) => {
-  console.error("INTELLIGENCE_ORCHESTRATOR_FAILED");
   console.error(error instanceof Error ? error.stack ?? error.message : String(error));
   process.exit(1);
 });
