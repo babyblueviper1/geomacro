@@ -8,6 +8,7 @@ test("private pilot ranks real repeat demand but cannot admit unlicensed sources
     { category: "MACRO", topic: "macro_risk", buyer_id: "b", external: true, settled: true, delivered: true },
     { category: "MACRO", topic: "macro_risk", buyer_id: "a", external: true, settled: true, delivered: true },
     { category: "GEOPOLITICS", topic: "hot_topics", buyer_id: "internal", external: false, settled: true, delivered: true },
+    { category: "GEOPOLITICS", topic: "hot_topics", buyer_id: "refund", external: true, settled: true, delivered: true, refunded: true },
     { category: "CRITICAL_MINERALS", topic: "critical_minerals", buyer_id: "c", external: true, unmet: true },
   ];
   const sources = [
