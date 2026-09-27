@@ -54,7 +54,8 @@ describe("permanent intelligence orchestration contract", () => {
     expect(script).toContain("state.cursor.failure_class = failureClass");
     expect(script).toContain("consecutive_failures");
     expect(script).toContain('status = "degraded"');
-    expect(script).toContain("for (const item of due)");
+    expect(script).toContain("const orderedDue = orderDueTasks(due)");
+    expect(script).toContain("for (const item of orderedDue)");
     expect(script).toContain("process.stderr.write(text)");
     expect(script).not.toContain("process.stdout.write(text)");
     expect(script).toContain("console.log(JSON.stringify(summary, null, 2));");
