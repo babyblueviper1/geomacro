@@ -100,7 +100,8 @@
     injectStandaloneSelector();
   }
 
-  document.addEventListener("click", (event) => {
+  function handleMenuLanguage(event) {
+    if (event.type === "keydown" && event.key !== "Enter" && event.key !== " ") return;
     const target = event.target instanceof Element ? event.target.closest('[role="menuitem"]') : null;
     if (!target) return;
     const code = LABEL_TO_CODE.get((target.textContent || "").trim());
@@ -108,8 +109,11 @@
     event.preventDefault();
     event.stopImmediatePropagation();
     navigate(code);
-  }, true);
+  }
 
+  document.addEventListener("pointerdown", handleMenuLanguage, true);
+  document.addEventListener("click", handleMenuLanguage, true);
+  document.addEventListener("keydown", handleMenuLanguage, true);
   document.addEventListener("DOMContentLoaded", bindAll);
   const observer = new MutationObserver(() => bindAll());
   observer.observe(document.documentElement, { childList: true, subtree: true });
