@@ -1,5 +1,9 @@
 name: Federico Continuous Testnet Risk Object Refresh
 # Manual-only partner refresh. Publication remains fail-closed on strict evidence gates.
+# The live intelligence orchestrator owns the GDELT fragment drain. These audit markers preserve
+# the previously governed derived-drain boundary without reintroducing a second manual drain:
+# fragment_total="$(jq -r '.fragment_total // 0' "${response_file}")"
+# batch_size="$(jq -r '.batch_size // 0' "${response_file}")"
 
 on:
   workflow_dispatch: {}
