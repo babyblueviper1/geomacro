@@ -2,6 +2,11 @@
 const BASE = "https://geomacro.live";
 const URL = `${BASE}/api/x402/risk/availability`;
 const BASE_SEPOLIA_NETWORK = "eip155:84532";
+const SAFE_FAIL_CLOSED_CODES = new Set([
+  "NOT_AVAILABLE",
+  "INSUFFICIENT_COVERAGE",
+  "COMMERCIAL_SOURCE_NOT_ELIGIBLE",
+]);
 
 const cases = [
   {
@@ -136,7 +141,7 @@ async function main() {
       invariantSafe &&
       response.status === 422 &&
       result.deliverable === false &&
-      ["NOT_AVAILABLE", "INSUFFICIENT_COVERAGE"].includes(result.code)
+      SAFE_FAIL_CLOSED_CODES.has(result.code)
     );
 
     const safelyAvailableOnTestnet = (
