@@ -59,6 +59,8 @@ The owner-connected Supabase project `ldpwajisioljyjtojvfx` was checked read-onl
 
 The largest raw observation contributors were GDELT v2 geopolitics (14,594 rows; 9.23 MB raw payload), USGS earthquakes multi-domain (15,936; 7.25 MB), UCDP candidate geopolitics (5,462; 5.29 MB), World Bank indicators macro (5,991; 1.63 MB), and USGS MCS minerals (1,162; 0.73 MB). The live Storage bucket held 29,036 `raw/` and 22,165 `fragments/` objects. These are inventory counts, not permission to delete evidence or infer that their total database footprint is just raw payload size.
 
+Compression audit: the raw mesh already writes gzip snapshots and `.ndjson.gz` fragments and verifies compressed SHA-256 after upload. The 22,165 fragment objects contain 33,203,628 compressed bytes (median object 513 bytes); the 29,036 raw objects contain 462,902,480 compressed bytes. The `storage.objects` relation occupies 110,845,952 Postgres bytes, of which 73,990,144 are indexes. Recompressing fragments cannot save this metadata/index footprint and may break content hashes. Among 28,944 snapshot rows, 10,153 repeat a prior `(target_id, content_sha256)` pair; this is a candidate for a new versioned content-addressed design, not permission to remove immutable capture history.
+
 ## Target topology
 
 1. **Public site:** Keep Lovable while publishing remains owner-controlled. An automatic Git-connected static deployment can be piloted separately, with the same canonical API endpoints and domain validation. No DNS cutover until preview, rollback and payment-origin checks pass. Static hosting is not a replacement for the API or database.
