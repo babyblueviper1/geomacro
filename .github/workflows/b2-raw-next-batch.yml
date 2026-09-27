@@ -1,4 +1,4 @@
-name: B2 raw archive next bounded batch
+name: B2 raw archive next bounded batch (resume)
 
 on:
   push:
