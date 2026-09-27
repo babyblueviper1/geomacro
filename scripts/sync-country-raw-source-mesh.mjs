@@ -331,7 +331,7 @@ async function main() {
     const q = await db
       .from("live_raw_source_targets")
       .select(
-        "target_id,country_iso3,category,transport,source_id,target_url,display_name,cadence_seconds,priority,last_attempt_at,last_success_at,consecutive_failures",
+        "target_id,country_iso3,category,transport,source_id,target_url,display_name,cadence_seconds,priority,discovery_state,last_attempt_at,last_success_at,last_observed_at,consecutive_failures",
       )
       .eq("enabled", true)
       .in("country_iso3", canonicalIso3)
@@ -666,8 +666,8 @@ async function main() {
       .update({
         discovery_state: extracted.length ? "REACHABLE" : "STALE",
         last_attempt_at: when,
-        last_success_at: when,
-        last_observed_at: when,
+        last_success_at: extracted.length ? when : t.last_success_at,
+        last_observed_at: extracted.length ? when : t.last_observed_at,
         consecutive_failures: 0,
         last_error: null,
         updated_at: when,
@@ -675,6 +675,7 @@ async function main() {
       .eq("target_id", t.target_id);
 
     if (updateError) throw updateError;
+    if (!extracted.length) throw new Error("RAW_SOURCE_NO_EXTRACTABLE_EVIDENCE");
     return fragmentId;
   }
 
