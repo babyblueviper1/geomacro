@@ -12,8 +12,10 @@ const key = process.env.APP_SUPABASE_SERVICE_ROLE_KEY;
 if (url !== "https://ldpwajisioljyjtojvfx.supabase.co" || !key) throw new Error("AUTHORITATIVE_SUPABASE_REQUIRED");
 const limit = Number(process.env.ARCHIVE_BATCH_LIMIT ?? 10);
 const olderHours = Number(process.env.ARCHIVE_OLDER_HOURS ?? 72);
+const offset = Number(process.env.ARCHIVE_BATCH_OFFSET ?? 0);
 if (!Number.isInteger(limit) || limit < 1 || limit > 25 ||
-    !Number.isInteger(olderHours) || olderHours < 72) throw new Error("ARCHIVE_BOUNDS_INVALID");
+    !Number.isInteger(olderHours) || olderHours < 72 ||
+    !Number.isInteger(offset) || offset < 0 || offset > 100_000) throw new Error("ARCHIVE_BOUNDS_INVALID");
 const bucket = "geomacro-private-archive";
 const b2 = createB2Client({ endpointUrl: process.env.B2_S3_ENDPOINT,
   accessKey: process.env.B2_KEY_ID, secretKey: process.env.B2_APPLICATION_KEY, bucket });
@@ -21,7 +23,8 @@ const db = createClient(url, key, { auth: { persistSession: false, autoRefreshTo
 const cutoff = new Date(Date.now() - olderHours * 3_600_000).toISOString();
 const { data: snapshots, error } = await db.from("live_raw_source_snapshots")
   .select("snapshot_id,storage_bucket,object_path,content_sha256,byte_count,fetched_at")
-  .lt("fetched_at", cutoff).order("fetched_at", { ascending: true }).limit(limit);
+  .lt("fetched_at", cutoff).order("fetched_at", { ascending: true })
+  .order("snapshot_id", { ascending: true }).range(offset, offset + limit - 1);
 if (error) throw error;
 let copied = 0;
 for (const snapshot of snapshots ?? []) {
@@ -50,4 +53,4 @@ for (const snapshot of snapshots ?? []) {
     archive_key: plan.archive_key, proof_key: proofKey, compressed_bytes: plan.compressed_bytes }));
 }
 console.log(JSON.stringify({ ok: true, copied, source_preserved: true, database_modified: false,
-  older_hours: olderHours, limit }));
+  older_hours: olderHours, limit, offset }));
