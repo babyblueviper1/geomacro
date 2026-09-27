@@ -124,6 +124,21 @@ function normalizedPathname(pathname: string): string {
 }
 
 
+export function isCoinbaseTestnetLocalSecurityFallbackAllowed(
+  pathnameInput: string,
+  routeClass: CentralSecurityRouteClass,
+): boolean {
+  const coinbaseEnvironment =
+    process.env.COINBASE_X402_ENVIRONMENT?.trim().toLowerCase();
+
+  return (
+    routeClass === "payment" &&
+    normalizedPathname(pathnameInput).startsWith("/api/x402") &&
+    coinbaseEnvironment === "testnet"
+  );
+}
+
+
 export function classifyCentralSecurityRoute(
   pathnameInput: string,
   methodInput: string,
@@ -571,6 +586,20 @@ export async function enforceCentralRequestSecurity(
       routeClass,
       error instanceof Error ? error.message : "unknown error",
     );
+
+    if (
+      isCoinbaseTestnetLocalSecurityFallbackAllowed(
+        input.pathname,
+        routeClass,
+      )
+    ) {
+      return {
+        allowed: true,
+        status: 200,
+        code: "CENTRAL_SECURITY_TESTNET_LOCAL_DEGRADED_PASS",
+        routeClass,
+      };
+    }
 
     if (policy.failClosed) {
       return {

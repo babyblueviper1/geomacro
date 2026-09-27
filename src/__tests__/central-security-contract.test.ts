@@ -14,6 +14,7 @@ import {
   centralSecurityClientKey,
   classifyCentralSecurityRoute,
   enforceCentralRequestSecurity,
+  isCoinbaseTestnetLocalSecurityFallbackAllowed,
   realFundsSecurityState,
 } from "../lib/central-security.server";
 
@@ -56,6 +57,49 @@ describe("Geomacro central security route boundary", () => {
     expect(classifyCentralSecurityRoute("/api/goat/pilot/order", "POST")).toBe("payment");
     expect(classifyCentralSecurityRoute("/api/goat/pilot/status", "POST")).toBe("payment");
     expect(classifyCentralSecurityRoute("/api/agent/risk", "POST")).toBe("payment");
+  });
+
+  it("allows local degraded security only for Coinbase x402 testnet paths", () => {
+    process.env.COINBASE_X402_ENVIRONMENT = "testnet";
+
+    expect(
+      isCoinbaseTestnetLocalSecurityFallbackAllowed(
+        "/api/x402/risk/availability",
+        "payment",
+      ),
+    ).toBe(true);
+    expect(
+      isCoinbaseTestnetLocalSecurityFallbackAllowed(
+        "/api/x402/intelligence",
+        "payment",
+      ),
+    ).toBe(true);
+    expect(
+      isCoinbaseTestnetLocalSecurityFallbackAllowed(
+        "/api/goat/pilot/order",
+        "payment",
+      ),
+    ).toBe(false);
+    expect(
+      isCoinbaseTestnetLocalSecurityFallbackAllowed(
+        "/api/agent/risk",
+        "payment",
+      ),
+    ).toBe(false);
+    expect(
+      isCoinbaseTestnetLocalSecurityFallbackAllowed(
+        "/api/x402/risk",
+        "commercial",
+      ),
+    ).toBe(false);
+
+    process.env.COINBASE_X402_ENVIRONMENT = "production";
+    expect(
+      isCoinbaseTestnetLocalSecurityFallbackAllowed(
+        "/api/x402/risk",
+        "payment",
+      ),
+    ).toBe(false);
   });
 
   it("covers Risk Gate, commercial APIs, internal APIs and server functions centrally", () => {
@@ -196,6 +240,8 @@ describe("central security deployment contract", () => {
     expect(middleware).toContain("Retry-After");
     expect(middleware).toContain("CENTRAL_SECURITY_VERSION");
     expect(centralSecurity).toContain(CENTRAL_SECURITY_VERSION);
+    expect(centralSecurity).toContain("CENTRAL_SECURITY_TESTNET_LOCAL_DEGRADED_PASS");
+    expect(centralSecurity).toContain('coinbaseEnvironment === "testnet"');
   });
 
   it("keeps the distributed abuse ledger server-only with RLS and no raw credential fields", () => {
