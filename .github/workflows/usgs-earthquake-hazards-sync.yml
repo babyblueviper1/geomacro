@@ -18,8 +18,7 @@ on:
       - "supabase/migrations/922_multidomain_observation_and_usgs_ingestion.sql"
       - ".github/workflows/usgs-earthquake-hazards-sync.yml"
   workflow_dispatch:
-  schedule:
-    - cron: "7 * * * *"
+  # Emergency quota hold. Manual dispatch remains available.
 
 permissions:
   contents: read
