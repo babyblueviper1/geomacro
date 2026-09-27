@@ -1,0 +1,48 @@
+name: Temporary Global Readiness Trigger Patch
+
+on:
+  push:
+    branches:
+      - fix/global-readiness-trigger-core-risk
+    paths:
+      - ".github/workflows/tmp-add-global-trigger.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout patch branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/global-readiness-trigger-core-risk
+          fetch-depth: 0
+      - name: Add readiness-critical trigger paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/global-production-coverage-gate.yml')
+          text = path.read_text()
+          anchor = '      - "src/lib/hot-topic-taxonomy.ts"\n'
+          insert = '      - "src/lib/country-risk-publisher.server.ts"\n      - "src/lib/country-risk-commercial-eligibility.ts"\n'
+          if insert in text:
+              raise SystemExit('TRIGGER_PATHS_ALREADY_PRESENT')
+          if text.count(anchor) != 1:
+              raise SystemExit(f'EXPECTED_ANCHOR_ONCE_FOUND_{text.count(anchor)}')
+          path.write_text(text.replace(anchor, anchor + insert, 1))
+          PY
+          git diff --check
+      - name: Commit branch-only patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/global-production-coverage-gate.yml
+          git commit -m "Trigger global readiness on country risk core changes"
+          git push origin HEAD:fix/global-readiness-trigger-core-risk
