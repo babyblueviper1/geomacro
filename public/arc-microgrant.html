@@ -13,7 +13,7 @@
     h1{font-size:clamp(38px,7vw,68px);line-height:.98;letter-spacing:-.05em;margin:24px 0 20px;max-width:860px}h2{margin-top:0}p{color:#aab3c3;line-height:1.7}.lead{font-size:18px;max-width:780px}
     .card{margin-top:30px;border:1px solid #242b39;background:#0e121a;border-radius:20px;padding:22px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:720px){.grid{grid-template-columns:1fr}}
     label{font-size:12px;color:#7f8ba0;display:block;margin-bottom:7px}input,button{width:100%;border-radius:12px;border:1px solid #2a3344;background:#0a0d13;color:#f5f7fb;padding:13px 14px;font:inherit}button{cursor:pointer;background:#eef3ff;color:#0b0d12;font-weight:700;border:0}button.secondary{background:#151b26;color:#e7edf9;border:1px solid #30394a}button:disabled{opacity:.55;cursor:not-allowed}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.actions button{width:auto;min-width:180px}
-    pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#090c12;border:1px solid #202735;border-radius:14px;padding:15px;color:#bdc9dd;min-height:90px}.warn{border-left:3px solid #d7a84b;padding-left:14px}.ok{color:#78d49b}.err{color:#ff8f8f}a{color:#a9c7ff}.small{font-size:12px;color:#778297}.metric{border:1px solid #232a38;border-radius:14px;padding:14px}.metric b{display:block;margin-top:6px;font-size:14px;overflow-wrap:anywhere}.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:26px}@media(max-width:720px){.steps{grid-template-columns:1fr}}.step{border:1px solid #232a38;border-radius:16px;padding:16px}.step strong{display:block;margin-bottom:6px}.badge{font-size:11px;color:#8ea0bb}
+    pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#090c12;border:1px solid #202735;border-radius:14px;padding:15px;color:#bdc9dd;min-height:90px}.warn{border-left:3px solid #d7a84b;padding-left:14px}.ok{color:#78d49b}.err{color:#ff8f8f}a{color:#a9c7ff}.small{font-size:12px;color:#778297}.metric{border:1px solid #232a38;border-radius:14px;padding:14px}.metric b{display:block;margin-top:6px;font-size:14px;overflow-wrap:anywhere}.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:26px}@media(max-width:720px){.steps{grid-template-columns:1fr}}.step{border:1px solid #232a38;border-radius:16px;padding:16px}.step strong{display:block;margin-bottom:6px}.badge{font-size:11px;color:#8ea0bb}.decoded{display:none;margin-top:18px}.decoded.show{display:block}.decoded-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.decoded-item{border:1px solid #232a38;border-radius:14px;padding:14px;background:#0a0d13}.decoded-item span{display:block;font-size:11px;color:#778297;margin-bottom:6px}.decoded-item b{display:block;font-size:13px;overflow-wrap:anywhere}.decoded-wide{grid-column:1/-1}@media(max-width:720px){.decoded-grid{grid-template-columns:1fr}.decoded-wide{grid-column:auto}}
   </style>
 </head>
 <body>
@@ -55,6 +55,20 @@
     <input id="verifyTx" placeholder="0x…" />
     <div class="actions"><button id="verify" class="secondary">Verify transaction</button></div>
     <pre id="verifyStatus">No transaction checked yet.</pre>
+
+    <div id="decodedPanel" class="decoded">
+      <h3>Decoded onchain data</h3>
+      <p class="small">This is the exact public proof record recovered from the Arc transaction. The full underlying Geomacro intelligence dataset is not stored onchain.</p>
+      <div class="decoded-grid">
+        <div class="decoded-item"><span>Country</span><b id="decodedCountry">—</b></div>
+        <div class="decoded-item"><span>Freshness</span><b id="decodedFreshness">—</b></div>
+        <div class="decoded-item"><span>State version</span><b id="decodedStateVersion">—</b></div>
+        <div class="decoded-item"><span>As of</span><b id="decodedAsOf">—</b></div>
+        <div class="decoded-item decoded-wide"><span>Proof hash</span><b id="decodedProof">—</b></div>
+        <div class="decoded-item decoded-wide"><span>Canonical data used to recompute the hash</span><pre id="decodedCanonical">—</pre></div>
+        <div class="decoded-item decoded-wide"><span>Raw UTF-8 proof record from transaction calldata</span><pre id="decodedRaw">—</pre></div>
+      </div>
+    </div>
   </section>
 
   <section class="card">
@@ -79,6 +93,20 @@ function utf8Hex(hex){if(typeof hex!=='string'||!hex.startsWith('0x'))throw new 
 async function sha256Hex(text){const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('');}
 function normalizeCountry(){const value=$('country').value.trim().toUpperCase();if(!/^[A-Z]{3}$/.test(value))throw new Error('Country must be a 3-letter ISO3 code.');$('country').value=value;return value;}
 function canonicalProof({country,stateVersion,asOf,freshness}){return JSON.stringify({schema:'geomacro.arc-mainnet-proof.v2',country,state_version:stateVersion,as_of:asOf,freshness});}
+function clearDecoded(){
+  $('decodedPanel').classList.remove('show');
+  for(const id of ['decodedCountry','decodedFreshness','decodedStateVersion','decodedAsOf','decodedProof','decodedCanonical','decodedRaw'])$(id).textContent='—';
+}
+function showDecoded({country,stateVersion,asOf,freshness,proof,decoded}){
+  $('decodedCountry').textContent=country;
+  $('decodedFreshness').textContent=freshness;
+  $('decodedStateVersion').textContent=stateVersion;
+  $('decodedAsOf').textContent=asOf;
+  $('decodedProof').textContent=proof;
+  $('decodedCanonical').textContent=JSON.stringify(JSON.parse(canonicalProof({country,stateVersion,asOf,freshness})),null,2);
+  $('decodedRaw').textContent=decoded;
+  $('decodedPanel').classList.add('show');
+}
 async function loadState(){
   try{
     const country=normalizeCountry();setStatus('status','Loading the current Geomacro intelligence state…');
@@ -117,9 +145,10 @@ async function anchor(){
 }
 async function rpc(method,params){const r=await fetch(ARC_RPC,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})});const j=await r.json();if(j.error)throw new Error(j.error.message||'Arc RPC error');return j.result;}
 async function verify(){
+  clearDecoded();
   try{
     const hash=$('verifyTx').value.trim();if(!/^0x[0-9a-fA-F]{64}$/.test(hash))throw new Error('Enter a valid 32-byte Arc transaction hash.');
-    setStatus('verifyStatus','Reading the transaction from Arc mainnet…');
+    setStatus('verifyStatus','Reading and decoding the transaction from Arc mainnet…');
     const [tx,receipt]=await Promise.all([rpc('eth_getTransactionByHash',[hash]),rpc('eth_getTransactionReceipt',[hash])]);
     if(!tx)throw new Error('Transaction was not found on Arc mainnet.');if(!receipt)throw new Error('Transaction exists but is not confirmed yet.');if(receipt.status!=='0x1')throw new Error('Transaction did not succeed.');
     if(String(tx.from).toLowerCase()!==String(tx.to).toLowerCase())throw new Error('Proof transaction shape is invalid: sender and recipient differ.');
@@ -130,7 +159,8 @@ async function verify(){
     if(!/^[A-Z]{3}$/.test(country)||!stateVersion||!asOf||!freshness||!/^[0-9a-f]{64}$/.test(proof))throw new Error('Proof record is malformed.');
     const recomputed=await sha256Hex(canonicalProof({country,stateVersion,asOf,freshness}));
     if(recomputed!==proof)throw new Error(`Proof mismatch. Recomputed ${recomputed} but transaction contains ${proof}.`);
-    setStatus('verifyStatus',`VERIFIED\n\nCountry: ${country}\nState version: ${stateVersion}\nAs of: ${asOf}\nFreshness: ${freshness}\nProof: ${proof}\nBlock: ${parseInt(receipt.blockNumber,16)}\n\nThe Arc transaction is confirmed, zero-value, self-sent, and its Geomacro proof recomputes exactly.`, 'ok');
+    showDecoded({country,stateVersion,asOf,freshness,proof,decoded});
+    setStatus('verifyStatus',`VERIFIED\n\nCountry: ${country}\nState version: ${stateVersion}\nAs of: ${asOf}\nFreshness: ${freshness}\nProof: ${proof}\nBlock: ${parseInt(receipt.blockNumber,16)}\n\nThe Arc transaction is confirmed, zero-value, self-sent, and its Geomacro proof recomputes exactly. The decoded onchain record is shown below.`, 'ok');
   }catch(e){setStatus('verifyStatus',e?.message||String(e),'err');}
 }
 $('load').addEventListener('click',loadState);$('connect').addEventListener('click',connect);$('anchor').addEventListener('click',anchor);$('verify').addEventListener('click',verify);
