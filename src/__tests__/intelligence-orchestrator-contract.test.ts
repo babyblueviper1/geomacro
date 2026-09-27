@@ -5,11 +5,22 @@ function read(path: string) {
   return fs.readFileSync(path, "utf8");
 }
 
+function expectScheduledOrExplicitQuotaHold(workflow: string) {
+  const emergencyMarker =
+    "Emergency quota hold. Preserve workflow_dispatch for controlled recovery.";
+  if (workflow.includes(emergencyMarker)) {
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).not.toContain("schedule:");
+    return;
+  }
+  expect(workflow).toContain('cron: "7,22,37,52 * * * *"');
+}
+
 describe("permanent intelligence orchestration contract", () => {
-  it("has exactly one scheduled intelligence heartbeat", () => {
+  it("has exactly one scheduled intelligence heartbeat or an explicit quota-recovery hold", () => {
     const workflow = read(".github/workflows/intelligence-orchestrator.yml");
     const orchestrator = read("scripts/intelligence-orchestrator.mjs");
-    expect(workflow).toContain('cron: "7,22,37,52 * * * *"');
+    expectScheduledOrExplicitQuotaHold(workflow);
     expect(workflow).toContain("group: geomacro-intelligence-orchestrator");
     expect(workflow).toContain("oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6");
     expect(workflow).not.toContain("oven-sh/setup-bun@0c5077e51419868618aaae5fe8019c62421857d6");
