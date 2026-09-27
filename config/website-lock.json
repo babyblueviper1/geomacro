@@ -1,11 +1,11 @@
 {
   "schema_version": "geomacro.website-lock.v1",
   "locked": true,
-  "baseline_sha": "f80ed4c75950838c91f58b31176c5e5be5c05965",
+  "baseline_sha": "fb83b067e445f5bf6159d071f74b7d1643d5ab4e",
   "published_baseline": "Founder-approved Geomacro website with complete 15-language navigation behavior, clean translation return paths, Arc Mainnet Risk Proof language access, and existing Testnet developer language surfaces preserved",
   "protect_lock_infrastructure": true,
   "policy": "Public website presentation is frozen. Intentional website changes require explicit founder approval and a dedicated baseline update.",
-  "locked_at_utc": "2026-09-27T08:17:00Z",
-  "published_source_sha": "f80ed4c75950838c91f58b31176c5e5be5c05965",
-  "lock_revision": "founder-approved-complete-language-pack-20260927"
+  "locked_at_utc": "2026-09-27T08:21:00Z",
+  "published_source_sha": "fb83b067e445f5bf6159d071f74b7d1643d5ab4e",
+  "lock_revision": "founder-approved-complete-language-pack-main-20260927"
 }
