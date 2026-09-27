@@ -16,7 +16,7 @@ if (rowError || row?.payload !== null || row?.archive_key !== `risk-object-archi
   throw new Error("GRO_EDGE_VERIFY_POINTER_INVALID");
 }
 const { data, error } = await db.functions.invoke("gro-archive-read", { body: { object_id: id } });
-if (error || !(data instanceof Blob)) throw new Error("GRO_EDGE_VERIFY_FETCH_FAILED");
+if (error || !(data instanceof Blob)) throw new Error(`GRO_EDGE_VERIFY_FETCH_FAILED_${error?.context?.status ?? "NO_HTTP"}_${data?.constructor?.name ?? "NULL"}`);
 const compressed = Buffer.from(await data.arrayBuffer());
 if (compressed.length > 2_000_000 ||
     createHash("sha256").update(compressed).digest("hex") !== row.archive_sha256) {
