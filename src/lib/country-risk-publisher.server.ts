@@ -336,58 +336,88 @@ async function loadRecentStructuredEvents(
           3_600_000,
     ).toISOString();
 
-  const result =
-    await db
-      .from(
-        "live_structured_events",
-      )
-      .select(`
-        id,
-        domain,
-        event_type,
-        title,
-        primary_country,
-        countries,
-        severity,
-        confidence,
-        direction,
-        first_seen_at,
-        last_seen_at,
-        last_observed_at,
-        evidence_count,
-        independent_source_count,
-        evidence_refs,
-        structure_version,
-        structured_payload,
-        commercial_eligibility_status,
-        commercial_eligibility_reason_codes
-      `)
-      .gte(
-        "last_observed_at",
-        cutoff,
-      )
-      .lte(
-        "last_observed_at",
-        asOf.toISOString(),
-      )
-      .order(
-        "last_observed_at",
-        {
-          ascending: false,
-        },
-      );
+  const pageSize = 1000;
+  const rows: Record<string, unknown>[] = [];
 
-  if (result.error) {
-    throw result.error;
+  // CANONICAL and PUBLIC_DEMO both enforce the same VERIFIED / DERIVED_ONLY
+  // event-id filter below. Push that existing rule into the database query so
+  // ineligible rows cannot consume a PostgREST page before admissible rows are
+  // considered. Still paginate every admissible row because the eligible set
+  // itself can exceed the server response cap.
+  for (let from = 0; ; from += pageSize) {
+    const result =
+      await db
+        .from(
+          "live_structured_events",
+        )
+        .select(`
+          id,
+          domain,
+          event_type,
+          title,
+          primary_country,
+          countries,
+          severity,
+          confidence,
+          direction,
+          first_seen_at,
+          last_seen_at,
+          last_observed_at,
+          evidence_count,
+          independent_source_count,
+          evidence_refs,
+          structure_version,
+          structured_payload,
+          commercial_eligibility_status,
+          commercial_eligibility_reason_codes
+        `)
+        .in(
+          "commercial_eligibility_status",
+          ["VERIFIED", "DERIVED_ONLY"],
+        )
+        .gte(
+          "last_observed_at",
+          cutoff,
+        )
+        .lte(
+          "last_observed_at",
+          asOf.toISOString(),
+        )
+        .order(
+          "last_observed_at",
+          {
+            ascending: false,
+          },
+        )
+        .order(
+          "id",
+          {
+            ascending: true,
+          },
+        )
+        .range(
+          from,
+          from + pageSize - 1,
+        );
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    const page =
+      (
+        result.data ?? []
+      ) as Record<
+        string,
+        unknown
+      >[];
+
+    rows.push(...page);
+
+    if (page.length < pageSize) {
+      break;
+    }
   }
-
-  const rows =
-    (
-      result.data ?? []
-    ) as Record<
-      string,
-      unknown
-    >[];
 
   return {
     events:
@@ -468,8 +498,8 @@ async function loadFedericoStructuredFallback(
 
   if (result.error) throw result.error;
 
-  const rows = (result.data ?? []) as Array<Record<string, unknown>>;
-  const candidateRows = rows.filter((row) => {
+  const fallbackRows = (result.data ?? []) as Array<Record<string, unknown>>;
+  const candidateRows = fallbackRows.filter((row) => {
     const primary = String(row.primary_country ?? "").trim().toUpperCase();
     const countries = Array.isArray(row.countries)
       ? row.countries.map((value) => String(value).trim().toUpperCase())

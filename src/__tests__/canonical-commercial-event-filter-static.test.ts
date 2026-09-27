@@ -16,6 +16,15 @@ describe("canonical country risk commercial event filter", () => {
     expect(publisher).toContain('eligibleEventIds.has(\n                item.event_id');
   });
 
+  it("loads the full admissible canonical event window with deterministic pagination", () => {
+    expect(publisher).toContain('const pageSize = 1000');
+    expect(publisher).toContain('.in(\n          "commercial_eligibility_status",\n          ["VERIFIED", "DERIVED_ONLY"]');
+    expect(publisher).toContain('.order(\n          "last_observed_at"');
+    expect(publisher).toContain('.order(\n          "id"');
+    expect(publisher).toContain('.range(\n          from,\n          from + pageSize - 1');
+    expect(publisher).toContain('if (page.length < pageSize)');
+  });
+
   it("keeps FEDERICO_STRICT outside the generic canonical/public filtering branch", () => {
     expect(publisher).toContain('deliveryProfile === "FEDERICO_STRICT"');
     expect(publisher).toContain(': await loadRecentStructuredEvents');
