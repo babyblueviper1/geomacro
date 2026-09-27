@@ -1,61 +1,119 @@
-# Arc Microgrants submission path
+# Geomacro · Arc Microgrants submission
 
-## Goal
+## One-line pitch
 
-Create a small, real Arc mainnet proof for Geomacro without turning on the production x402/payment launch flags.
+Geomacro turns live geopolitical and macro risk states into tamper-evident proofs that can be anchored and independently verified on Arc mainnet.
 
-Public surface after deployment:
+## Why this exists
+
+AI agents and automated treasury systems increasingly make decisions from offchain data. The hard part is proving, later, exactly which risk state informed a decision.
+
+Geomacro already produces machine-readable risk intelligence. This Arc mainnet proof adds a simple trust layer: generate a deterministic proof from a current Geomacro state, anchor the proof record on Arc, then let any reviewer recompute and verify it from the transaction itself.
+
+The point is not to put the full intelligence dataset onchain. The point is to make the exact state used at a moment in time independently auditable.
+
+## Live flow
+
+Public page after deployment:
 
 - `https://geomacro.live/arc-microgrant.html`
 
-## What the proof does
+The flow is intentionally small:
 
-1. Reads `/api/intelligence/state?country=USA` from Geomacro.
-2. Builds a compact canonical proof payload from the current state version, as-of time and freshness.
-3. Computes SHA-256 locally in the browser.
-4. Connects an injected EVM wallet and requires Arc mainnet (`chainId 5042`, `0x13b2`).
-5. Sends a zero-value transaction from the wallet to itself with the Geomacro proof in calldata.
-6. Exposes the resulting mainnet transaction hash and explorer link.
+1. **Generate** — load a current Geomacro country risk state.
+2. **Anchor** — create a deterministic SHA-256 proof and write the public proof record to an Arc mainnet transaction.
+3. **Verify** — paste the transaction hash; the page reads Arc mainnet, decodes the record, recomputes the hash and returns `VERIFIED` only if everything matches.
 
-The only real value spent is Arc gas, which is paid in USDC.
+## What is written on Arc
 
-## Safety boundaries
+Proof format:
 
-- No private key is stored by Geomacro.
-- No server-side signing or custody is introduced.
-- Existing Arc Testnet flows are untouched.
-- `ARC_MAINNET.live` is not changed.
-- Production x402 provider flags remain disabled where they are disabled today.
-- The Risk Gate remains non-executing and the mainnet proof does not authorize a payment or business action.
+`GEOMACRO_ARC_MAINNET_V2|<country>|<state_version>|<as_of>|<freshness>|<sha256_proof>`
 
-## Mainnet network parameters
+The proof hash is derived from:
+
+- schema version
+- ISO3 country
+- Geomacro state version
+- as-of timestamp
+- freshness status
+
+The transaction is wallet-to-self with value `0`. Only Arc gas is spent.
+
+## Arc mainnet
 
 - Chain ID: `5042`
-- Hex chain ID: `0x13b2`
+- Hex: `0x13b2`
 - RPC: `https://rpc.mainnet.arc.io`
 - Gas asset: USDC
 - Explorer: `https://explorer.arc.io`
 
-## Final manual acceptance
+## Safety boundaries
 
-After this branch is merged and the site is published:
+This Microgrants implementation is deliberately isolated from Geomacro's wider payment launch.
 
-1. Open `https://geomacro.live/arc-microgrant.html`.
-2. Load a current state.
-3. Connect a wallet that has a small amount of real USDC available for Arc mainnet gas.
-4. Confirm the Arc mainnet network.
-5. Click `Anchor proof on mainnet` and approve the wallet transaction.
-6. Confirm the transaction succeeds in the Arc explorer.
-7. Save the live page URL, public repository URL and transaction URL for the DoraHacks submission.
+- No private key is stored by Geomacro.
+- The user signs directly in their wallet.
+- Existing Arc Testnet flows remain unchanged.
+- `ARC_MAINNET.live` is not globally enabled.
+- Production x402 flags remain unchanged.
+- The Risk Gate remains non-executing.
+- The proof does not authorize a payment or business action.
+- No personal data, secrets or raw source material is written onchain.
 
-Do not submit until the mainnet transaction has actually confirmed.
+## Final acceptance before submission
 
-## Suggested DoraHacks description
+Do not submit until all of these are true:
 
-Geomacro is machine-readable geopolitical and macro risk infrastructure for autonomous systems. This Arc mainnet experiment takes a current Geomacro intelligence state, creates a deterministic local proof, and anchors that proof on Arc in a wallet-signed transaction. It demonstrates a minimal production-safe bridge between offchain risk intelligence and verifiable onchain state without enabling Geomacro's broader production payment rails.
+- [ ] `https://geomacro.live/arc-microgrant.html` loads publicly.
+- [ ] Current Geomacro state loads successfully.
+- [ ] Browser wallet switches to Arc mainnet.
+- [ ] A real Arc mainnet proof transaction confirms.
+- [ ] The transaction is visible on `explorer.arc.io`.
+- [ ] Pasting the same transaction into **Verify** returns `VERIFIED`.
+- [ ] Repository is public.
+- [ ] The live URL, repository URL and Arc transaction URL are included in the DoraHacks submission.
+- [ ] A short screen recording shows Generate → Anchor → Verify.
 
-## Suggested proof links
+## Human submission copy
 
-- Live app: `https://geomacro.live/arc-microgrant.html`
-- Repository: `https://github.com/blocknine0/geomacro`
-- Mainnet transaction: add after final acceptance
+### Project name
+
+**Geomacro · Arc Risk Proof**
+
+### Short description
+
+Geomacro is a geopolitical and macro risk intelligence layer for machines. For this Arc deployment, I wanted to solve a very specific trust problem: if an AI agent or treasury system acts on an offchain risk signal, how can someone later prove which state it actually used?
+
+The demo loads a current Geomacro risk state, creates a deterministic proof in the browser, and anchors that proof on Arc mainnet. Anyone can paste the transaction hash back into the verifier, which reads the Arc transaction and recomputes the proof independently.
+
+It is intentionally small and auditable. The wallet signs directly, the transaction sends zero value, and only Arc gas is spent. Geomacro never receives the private key and the broader production payment rails stay disabled.
+
+### Why Arc
+
+Arc gives the proof a public, timestamped and independently readable execution layer while keeping the interaction simple for USDC-native applications. Instead of asking users to trust a screenshot or a database record, I can point to one Arc transaction and reproduce the proof from it.
+
+### What is working today
+
+- live Geomacro intelligence state
+- deterministic SHA-256 proof generation
+- real Arc mainnet wallet transaction
+- proof data stored in transaction calldata
+- independent transaction verification
+- public Arc explorer proof
+- public source code
+
+### What I would use the 500 USDC for
+
+The next step is to move from country-level state proofs to agent-consumable signed Risk Object attestations on Arc, then connect that verification layer to Geomacro's machine-payment API. The grant would cover Arc mainnet testing, transaction costs, monitoring and the first production verification workflow for external agent integrators.
+
+## Links to include
+
+- Live demo: `https://geomacro.live/arc-microgrant.html`
+- Main product: `https://geomacro.live`
+- Source: `https://github.com/blocknine0/geomacro`
+- Arc mainnet transaction: **add after final acceptance**
+
+## 60-second demo script
+
+> Geomacro provides machine-readable geopolitical and macro risk intelligence. The problem I am testing here is simple: when an automated system uses an offchain risk state, I want that exact state to be auditable later. I load a current Geomacro state, generate its deterministic proof, and anchor the public proof record on Arc mainnet. The wallet signs the transaction directly. Now I can paste the transaction hash into the verifier. It reads the Arc transaction, rebuilds the proof from the onchain record, and only returns VERIFIED when the recomputed hash matches. This gives an AI agent or treasury workflow a simple way to prove which Geomacro state existed at the point of decision without putting the underlying dataset onchain.
