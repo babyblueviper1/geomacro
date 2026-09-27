@@ -53,6 +53,12 @@ The owner supplied a production Supabase table-size report on 2026-09-27. The da
 
 The Global Coverage Readiness Gate run 36295216955 had 98 paid-ready and 96 fail-closed sovereign objects out of 194. Recent main also had failed coverage, live performance and deployment workflows. Passing static/prelaunch checks does not supersede these live failures.
 
+### Connected production audit, 2026-09-27
+
+The owner-connected Supabase project `ldpwajisioljyjtojvfx` was checked read-only. PostgreSQL reported 565,718,163 bytes (540 MB). All 73,780 `live_recent_fingerprints` were unexpired, so the proposed expired-row cleanup currently reclaims **zero** rows. The private commercial revenue delivery proof ledger contained **zero** rows: no first-10k commercial progress may be claimed yet. `live_source_certification_records` contained 1,027 `NOT_STARTED` records, zero `CERTIFIED`; all have unreviewed rights and untested runtime. Some `live_external_sources` rows say `COMMERCIAL_OK`, but that alone does not satisfy the independent certification gate. Do not turn on the pilot source scheduler from the registry's candidate list.
+
+The largest raw observation contributors were GDELT v2 geopolitics (14,594 rows; 9.23 MB raw payload), USGS earthquakes multi-domain (15,936; 7.25 MB), UCDP candidate geopolitics (5,462; 5.29 MB), World Bank indicators macro (5,991; 1.63 MB), and USGS MCS minerals (1,162; 0.73 MB). The live Storage bucket held 29,036 `raw/` and 22,165 `fragments/` objects. These are inventory counts, not permission to delete evidence or infer that their total database footprint is just raw payload size.
+
 ## Target topology
 
 1. **Public site:** Keep Lovable while publishing remains owner-controlled. An automatic Git-connected static deployment can be piloted separately, with the same canonical API endpoints and domain validation. No DNS cutover until preview, rollback and payment-origin checks pass. Static hosting is not a replacement for the API or database.
