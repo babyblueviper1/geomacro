@@ -13,6 +13,7 @@ export function parseB2Endpoint(value) {
 
 export function archiveObjectPlan({ bucket, objectPath, compressedBytes, compressedSha256, payloadSha256 }) {
   if (bucket !== "geomacro-private-archive" || !/^(raw|fragments|live|fanout)\/v1\//.test(objectPath) ||
+      !/^[A-Za-z0-9_./-]+$/.test(objectPath) ||
       objectPath.includes("..") || objectPath.startsWith("/")) throw new Error("ARCHIVE_SCOPE_INVALID");
   const compressed = Buffer.from(compressedBytes);
   if (sha256(compressed) !== compressedSha256) throw new Error("ARCHIVE_COMPRESSED_HASH_MISMATCH");
