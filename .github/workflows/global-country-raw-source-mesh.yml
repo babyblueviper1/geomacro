@@ -2,15 +2,6 @@ name: Global Country Raw Source Mesh
 
 on:
   workflow_dispatch: {}
-  schedule:
-    - cron: "40 * * * *"
-  push:
-    branches: [main]
-    paths:
-      - "scripts/sync-country-raw-source-mesh.mjs"
-      - "scripts/reconcile-structured-event-commercial-rights.mjs"
-      - "scripts/drain-live-structure.mjs"
-      - ".github/workflows/global-country-raw-source-mesh.yml"
 
 permissions:
   contents: read
