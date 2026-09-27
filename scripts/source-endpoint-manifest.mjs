@@ -28,9 +28,10 @@ export async function collectMigrationEndpointManifest(root = process.cwd()) {
     "970_realtime_scope_fanout_mesh.sql",
     "973_completed_source_access_registry.sql",
     "974_global_source_p0_expansion.sql",
+    "981_three_category_source_candidates.sql",
   ]);
-  // Phase-B endpoint census remains frozen at 933; Stage-1 realtime fanout
-  // has its own source/target governance and is audited separately.
+  // Phase-B endpoint census remains frozen at 933. Later disabled source
+  // candidates have separate certification and must not silently alter it.
   const sourceFiles = files.filter((file) => !excludedMigrationNames.has(path.basename(file)));
   const urlMap = new Map();
 
