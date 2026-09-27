@@ -129,9 +129,14 @@ export const FEDERICO_STRICT_MAJOR_SOURCE_IDS = [
   "aljazeera_rss",
 ] as const;
 
+// Every source admitted here is already a governed, independently identified
+// source family in the live corroborator. Keep the publication layer aligned
+// with that same trust universe so a source cannot help establish verification
+// and then disappear from the independently-auditable evidence count.
 export const FEDERICO_STRICT_AUDITABLE_SOURCE_IDS = [
   "xinhua_english_china_rss",
   "scmp_china_rss",
+  "forexlive_rss",
   "aljazeera_rss",
   "bbc_world_rss",
 ] as const;
