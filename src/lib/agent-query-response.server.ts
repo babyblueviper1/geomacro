@@ -46,6 +46,12 @@ type LoadedRiskObject = {
   object: NonNullable<Awaited<ReturnType<typeof loadCommercialRiskObjectForAgentQuery>>>;
 };
 
+function subjectKey(subject: AgentQueryPlan["subjects"][number]) {
+  return subject.type === "country"
+    ? `country:${subject.country_iso3}`
+    : `corridor:${subject.origin_country_iso3}>${subject.destination_country_iso3}`;
+}
+
 function moduleMatches(module: string, dimension: string) {
   const normalized = dimension.trim().toLowerCase();
   return (MODULE_ALIASES[module] ?? [module]).some(
