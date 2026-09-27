@@ -1,3 +1,4 @@
+import { createSupabaseContext } from "npm:@supabase/server";
 // Private B2 archive bridge for server-side GRO restore only.
 // The caller must present the authoritative project's service-role key.
 const encoder = new TextEncoder();
@@ -12,25 +13,8 @@ async function hmac(key: Uint8Array | string, value: string): Promise<Uint8Array
 
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
-  const candidate = request.headers.get("apikey");
-  if (!candidate || request.headers.get("authorization") !== `Bearer ${candidate}`) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-  // PostgREST resolves both legacy service-role JWTs and newer secret API keys
-  // to a database role. Only service_role may execute this invoker RPC.
-  const verified = await fetch(
-    "https://ldpwajisioljyjtojvfx.supabase.co/rest/v1/rpc/internal_gro_archive_reader_authorized",
-    {
-      method: "POST",
-      headers: { apikey: candidate, authorization: `Bearer ${candidate}`,
-        "content-type": "application/json" },
-      body: "{}",
-      signal: AbortSignal.timeout(5_000),
-    },
-  ).catch(() => null);
-  if (!verified?.ok || (await verified.text()).trim() !== "true") {
-    return new Response("Forbidden", { status: 403 });
-  }
+  const { data: context, error: authError } = await createSupabaseContext(request, { auth: "secret" });
+  if (authError || !context) return new Response("Unauthorized", { status: 401 });
   try {
     const { object_id: id } = await request.json();
     if (typeof id !== "string" || !/^gro_[A-Za-z0-9_]+$/.test(id)) {
