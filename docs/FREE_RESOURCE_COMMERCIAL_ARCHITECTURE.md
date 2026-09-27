@@ -8,6 +8,25 @@ Run a small, paid pilot on free quotas only while every measured resource has he
 
 The current 0.05 USDC launch price yields 500 USDC gross for 10,000 completed deliveries, before all transaction/provider/hosting costs. A verified payment and completed delivery must reconcile under one request identity. Testnet receipts are never revenue.
 
+## First 10,000 paid deliveries and global demand
+
+The target is **10,000 distinct successfully settled and delivered customer requests at 0.05 USDC each = 500 USDC gross**, denominated in USDC. It is not a promise of 500 USD cash, net profit, or founder-funded test traffic. Count exactly one delivery per verified settlement and idempotency key; refunded, failed, testnet, replayed, internal and unpaid requests do not count. Reconcile funds actually received, payment/provider/network fees, refunds and operating cost daily. Withdraw or upgrade only from available reconciled funds after retaining a reserve for settlement disputes and service recovery.
+
+| Stage | Cumulative paid deliveries | Gross USDC at launch price | Evidence to advance |
+| --- | ---: | ---: | --- |
+| Controlled production pilot | 100 | 5 | At least two unrelated external buyers, audited delivery and no-charge failure handling; no founder purchases counted. |
+| Repeat-use validation | 1,000 | 50 | Multiple buyers repeat within their normal workflow; observed per-delivery cost, uptime and rights eligibility stay inside budget. |
+| Expansion | 5,000 | 250 | Usage survives more than one source-release cycle; documented use cases, support burden, retention and gross margin. |
+| Upgrade decision | 10,000 | 500 | Distinct paid request ledger reconciles with provider statements and delivered response IDs; allocate the net available balance to the measured bottleneck. |
+
+These buyer counts are advancement criteria, not forecasts. Ten thousand calls from one buyer demonstrate usage but weak evidence of broad demand. Do not inflate paid volume with our own wallets or charge for unavailable coverage. At 0.05 USDC, even a 0.01 USDC variable cost per delivery consumes 100 USDC over 10,000 calls before fixed costs; measure this instead of assuming the full 500 USDC can fund upgrades.
+
+The first global wedge is a narrow, verifiable machine-readable country risk/change feed for agent builders, cross-border operations and research automation. Publish a public schema, a no-payment sample with provenance and freshness, 3 copyable integration examples (country event change, macro release change, mineral supply/policy change), a status/coverage page and a clear 402 payment example. The sample must use rights-cleared data, show stale/unavailable explicitly and never masquerade as paid delivery. Prioritize regions and capabilities that pass live readiness; show the coverage map and do not advertise 194 paid-ready countries while 96 remain fail-closed.
+
+Recruit a small set of design partners in at least three independent markets or workflows. Ask each what decision they make, what current data costs them, how fresh a signal must be, how they would integrate it, and whether they will make a real paid call. Record consented interviews and product feedback, then offer a trial integration with their own production payment. Distribute the integration through developer documentation, relevant agent/API catalogs and technical demos; measure qualified visits -> successful integration -> first external paid delivery -> repeat buyer -> retained weekly buyer. Record buyer geography, use case, category, failure reason, latency, rights and margin without collecting unnecessary personal data. Iterate the category and country scope using observed repeat purchases, not impressions or social reach.
+
+A funding evidence pack should contain a working demo, independently verifiable paid receipts, cohort-based repeat buyers, category demand, real unit economics, coverage and licensing evidence, uptime/incident history, and a concrete use of funds (for example database headroom and reliable compute). Seek grant, partner or investor conversations only with accurate traction; 500 USDC gross alone is not proof of product-market fit or funding eligibility. No claim of investment return or guaranteed funding is implied.
+
 ## Current baseline and blockers
 
 The owner supplied a production Supabase table-size report on 2026-09-27. The dashboard showed about 116% of the 500 MB database quota and 4.597 GB of monthly log ingestion against a 1 GB included amount. The largest relations were:
