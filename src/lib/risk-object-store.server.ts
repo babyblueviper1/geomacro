@@ -1,6 +1,7 @@
 import {
   requireRiskSupabase,
 } from "./risk-supabase.server";
+import { loadRiskObjectPayload } from "./risk-object-archive.server";
 
 import {
   PUBLIC_DEMO_RISK_PROFILE_REASON,
@@ -18,6 +19,9 @@ import {
 type RiskObjectRow = {
   object_id: string;
   payload: unknown;
+  payload_hash: string | null;
+  archive_key: string | null;
+  archive_sha256: string | null;
   generated_at: string;
   expires_at: string;
 };
@@ -279,7 +283,7 @@ getLatestCompatibleCountryRiskObject(
         "geomacro_risk_objects",
       )
       .select(
-        "object_id,payload,generated_at,expires_at",
+        "object_id,payload,payload_hash,archive_key,archive_sha256,generated_at,expires_at",
       )
       .eq(
         "subject_type",
@@ -339,10 +343,11 @@ getLatestCompatibleCountryRiskObject(
 
   const row =
     result.data as RiskObjectRow;
+  const payload = await loadRiskObjectPayload(row);
 
   if (
     !isCompatibleCountryRiskObject(
-      row.payload,
+      payload,
       iso3,
     )
   ) {
@@ -351,7 +356,7 @@ getLatestCompatibleCountryRiskObject(
     );
   }
 
-  return row.payload;
+  return payload;
 }
 
 
@@ -400,7 +405,7 @@ getLatestCompatibleCountryRiskObjectAtOrBefore(
         "geomacro_risk_objects",
       )
       .select(
-        "object_id,payload,generated_at,expires_at",
+        "object_id,payload,payload_hash,archive_key,archive_sha256,generated_at,expires_at",
       )
       .eq(
         "subject_type",
@@ -462,10 +467,11 @@ getLatestCompatibleCountryRiskObjectAtOrBefore(
 
   const row =
     result.data as RiskObjectRow;
+  const payload = await loadRiskObjectPayload(row);
 
   if (
     !isCompatibleCountryRiskObject(
-      row.payload,
+      payload,
       iso3,
     )
   ) {
@@ -474,7 +480,7 @@ getLatestCompatibleCountryRiskObjectAtOrBefore(
     );
   }
 
-  return row.payload;
+  return payload;
 }
 
 
@@ -493,7 +499,7 @@ getRiskObjectByObjectId(
         "geomacro_risk_objects",
       )
       .select(
-        "object_id,payload,generated_at,expires_at",
+        "object_id,payload,payload_hash,archive_key,archive_sha256,generated_at,expires_at",
       )
       .eq(
         "object_id",
@@ -509,9 +515,7 @@ getRiskObjectByObjectId(
     return null;
   }
 
-  return (
-    result.data as RiskObjectRow
-  ).payload as GeomacroRiskObject;
+  return loadRiskObjectPayload(result.data as RiskObjectRow);
 }
 
 
@@ -570,7 +574,7 @@ getLatestCompatibleCorridorRiskObject(
         "geomacro_risk_objects",
       )
       .select(
-        "object_id,payload,generated_at,expires_at",
+        "object_id,payload,payload_hash,archive_key,archive_sha256,generated_at,expires_at",
       )
       .eq(
         "subject_type",
@@ -625,10 +629,11 @@ getLatestCompatibleCorridorRiskObject(
   const row =
     result.data as
       RiskObjectRow;
+  const payload = await loadRiskObjectPayload(row);
 
   if (
     !isCompatibleCorridorRiskObject(
-      row.payload,
+      payload,
       id,
     )
   ) {
@@ -637,7 +642,7 @@ getLatestCompatibleCorridorRiskObject(
     );
   }
 
-  return row.payload;
+  return payload;
 }
 
 
@@ -682,7 +687,7 @@ getLatestCompatibleCorridorRiskObjectAtOrBefore(
         "geomacro_risk_objects",
       )
       .select(
-        "object_id,payload,generated_at,expires_at",
+        "object_id,payload,payload_hash,archive_key,archive_sha256,generated_at,expires_at",
       )
       .eq(
         "subject_type",
@@ -742,10 +747,11 @@ getLatestCompatibleCorridorRiskObjectAtOrBefore(
   const row =
     result.data as
       RiskObjectRow;
+  const payload = await loadRiskObjectPayload(row);
 
   if (
     !isCompatibleCorridorRiskObject(
-      row.payload,
+      payload,
       id,
     )
   ) {
@@ -754,5 +760,5 @@ getLatestCompatibleCorridorRiskObjectAtOrBefore(
     );
   }
 
-  return row.payload;
+  return payload;
 }
