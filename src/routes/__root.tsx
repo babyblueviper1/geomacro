@@ -160,6 +160,7 @@ function RootShell({ children }: { children: ReactNode }) {
       </head>
       <body>
         {children}
+        <script src="/geomacro-language.js" defer />
         <Scripts />
       </body>
     </html>
