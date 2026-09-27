@@ -9,14 +9,15 @@ const url = process.env.APP_SUPABASE_URL;
 const role = process.env.APP_SUPABASE_SERVICE_ROLE_KEY;
 if (url !== "https://ldpwajisioljyjtojvfx.supabase.co" || !role) throw new Error("GRO_EDGE_VERIFY_CONFIG_REQUIRED");
 const db = createClient(url, role, { auth: { persistSession: false, autoRefreshToken: false } });
+const { data, error } = await db.functions.invoke("gro-archive-read", { body: { object_id: id } });
+if (error || !(data instanceof Blob)) throw new Error(`GRO_EDGE_VERIFY_FETCH_FAILED_${error?.context?.status ?? "NO_HTTP"}_${data?.constructor?.name ?? "NULL"}`);
+console.log(JSON.stringify({ edge_response_verified: true, object_id: id }));
 const { data: row, error: rowError } = await db.from("geomacro_risk_objects")
   .select("object_id,payload_hash,archive_sha256,archive_key,payload")
   .eq("object_id", id).single();
 if (rowError || row?.payload !== null || row?.archive_key !== `risk-object-archive/v1/${id}.json.gz`) {
   throw new Error("GRO_EDGE_VERIFY_POINTER_INVALID");
 }
-const { data, error } = await db.functions.invoke("gro-archive-read", { body: { object_id: id } });
-if (error || !(data instanceof Blob)) throw new Error(`GRO_EDGE_VERIFY_FETCH_FAILED_${error?.context?.status ?? "NO_HTTP"}_${data?.constructor?.name ?? "NULL"}`);
 const compressed = Buffer.from(await data.arrayBuffer());
 if (compressed.length > 2_000_000 ||
     createHash("sha256").update(compressed).digest("hex") !== row.archive_sha256) {
