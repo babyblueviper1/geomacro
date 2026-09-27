@@ -7,14 +7,21 @@ alter table public.geomacro_risk_objects
 alter table public.geomacro_risk_objects
   alter column payload drop not null;
 
-alter table public.geomacro_risk_objects
-  add constraint geomacro_risk_objects_archive_shape_check
-  check (
-    (payload is not null and archive_key is null and archive_sha256 is null)
-    or
-    (payload is null and archive_key = 'risk-object-archive/v1/' || object_id || '.json.gz'
-      and archive_sha256 ~ '^[a-f0-9]{64}$' and payload_hash ~ '^[a-f0-9]{64}$')
-  );
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'geomacro_risk_objects_archive_shape_check'
+      and conrelid = 'public.geomacro_risk_objects'::regclass
+  ) then
+    alter table public.geomacro_risk_objects
+      add constraint geomacro_risk_objects_archive_shape_check
+      check (
+        (payload is not null and archive_key is null and archive_sha256 is null)
+        or
+        (payload is null and archive_key = 'risk-object-archive/v1/' || object_id || '.json.gz'
+          and archive_sha256 ~ '^[a-f0-9]{64}$' and payload_hash ~ '^[a-f0-9]{64}$')
+      );
+  end if;
+end $$;
 
 create or replace function public.prevent_geomacro_risk_object_mutation()
 returns trigger language plpgsql as $$
