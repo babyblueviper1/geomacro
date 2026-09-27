@@ -4,6 +4,8 @@ import { publishCorridorRiskObject } from "../src/lib/corridor-risk-publisher.se
 import { verifyRiskObjectSignature } from "../src/lib/risk-object-signing.server";
 
 const DEFAULT_PAIRS = ["USA>CHN", "CHN>USA"] as const;
+const CORRIDOR_VERIFICATION_REASON = "corridor_methodology_pilot_not_independently_verified";
+const CORRIDOR_COMMERCIAL_REASON = "corridor_commercial_eligibility_not_independently_verified";
 
 function parsePairs() {
   const configured = String(process.env.GEOMACRO_CANONICAL_CORRIDOR_PAIRS ?? "").trim();
@@ -25,6 +27,28 @@ function assertFresh(expiresAt: string, now: Date) {
   }
 }
 
+function assertPilotSafetyBoundary(
+  object: Awaited<ReturnType<typeof publishCorridorRiskObject>>["object"],
+  corridor: string,
+) {
+  if (object.verification.status !== "INCOMPLETE") {
+    throw new Error(
+      `Canonical corridor pilot verification boundary changed for ${corridor}: ${object.verification.status}`,
+    );
+  }
+  if (object.commercial_eligibility.status !== "UNVERIFIED") {
+    throw new Error(
+      `Canonical corridor pilot commercial boundary changed for ${corridor}: ${object.commercial_eligibility.status}`,
+    );
+  }
+  if (!object.verification.reason_codes.includes(CORRIDOR_VERIFICATION_REASON)) {
+    throw new Error(`Canonical corridor pilot verification reason missing for ${corridor}`);
+  }
+  if (!object.commercial_eligibility.reason_codes.includes(CORRIDOR_COMMERCIAL_REASON)) {
+    throw new Error(`Canonical corridor pilot commercial reason missing for ${corridor}`);
+  }
+}
+
 async function main() {
   const now = new Date();
   const asOf = now.toISOString();
@@ -33,6 +57,7 @@ async function main() {
 
   const results = [];
   for (const [origin, destination] of pairs) {
+    const corridor = `${origin}>${destination}`;
     const published = await publishCorridorRiskObject({
       origin_country_iso3: origin,
       destination_country_iso3: destination,
@@ -42,15 +67,13 @@ async function main() {
 
     const verification = verifyRiskObjectSignature(published.object);
     if (!verification.valid) {
-      throw new Error(`Canonical corridor signature invalid for ${origin}>${destination}: ${verification.reason}`);
+      throw new Error(`Canonical corridor signature invalid for ${corridor}: ${verification.reason}`);
     }
     assertFresh(published.object.expires_at, now);
-    if (published.object.commercial_eligibility.status !== "VERIFIED") {
-      throw new Error(`Canonical corridor is not commercially verified: ${origin}>${destination}`);
-    }
+    assertPilotSafetyBoundary(published.object, corridor);
 
     results.push({
-      corridor: `${origin}>${destination}`,
+      corridor,
       object_id: published.object.object_id,
       verification_status: published.object.verification.status,
       commercial_eligibility_status: published.object.commercial_eligibility.status,
@@ -66,6 +89,8 @@ async function main() {
     corridors: results,
     boundaries: {
       delivery_profile: "CANONICAL",
+      corridor_methodology_verified: false,
+      commercial_delivery_authorized: false,
       payment_performed: false,
       execution_authorized: false,
       mainnet_activation_changed: false,
