@@ -27,6 +27,14 @@ Recruit a small set of design partners in at least three independent markets or 
 
 A funding evidence pack should contain a working demo, independently verifiable paid receipts, cohort-based repeat buyers, category demand, real unit economics, coverage and licensing evidence, uptime/incident history, and a concrete use of funds (for example database headroom and reliable compute). Seek grant, partner or investor conversations only with accurate traction; 500 USDC gross alone is not proof of product-market fit or funding eligibility. No claim of investment return or guaranteed funding is implied.
 
+### Private first-10k pilot and adaptive agent
+
+Keep the pilot invitation-only and commercially honest: each buyer opts in, sees the price, scope, data limitations and payment terms, and can receive receipts/support. Do not advertise the pilot as public launch, fabricate buyers, hide material limitations, or scrape private demand data. Store pseudonymous buyer identity, category/topic, request outcome, latency, charged amount and acquisition channel with controlled access and retention; aggregate metrics before publishing.
+
+`config/private-pilot-demand.v1.json` fixes category topics, source preferences, extra-poll ceilings and automation boundaries. `scripts/commercial/private-pilot-demand-policy.mjs` produces an offline advisory priority from settled, delivered external requests and unmet requests. The agent may recommend which *already certified and commercially eligible* source family to prioritize and which proven capability to document or display. It may not activate a source, relax freshness/independence/rights gates, change the 0.05 USDC offer, send unsolicited marketing, or create false events. Geopolitics favors official event/security/sanctions sources; Macro favors release-based national and intergovernmental series; Critical Minerals favors geological, trade and national authority releases. Their extra-poll ceilings differ to avoid filling the database with unchanged data.
+
+Integration gate: derive signals from the immutable, reconciled commerce ledger through a read-only aggregate (never from visitor impressions or unpaid testnet requests); verify buyer deduplication and refunds; join the live source certification/rights table by source and country; then permit a bounded scheduler change behind a reviewed feature flag. Until that join and cost meter exist, the recommender remains advisory and cannot modify production polling. A live request still uses the canonical delivery and payment gates and reports unavailable rather than manufacturing a demanded answer.
+
 ## Current baseline and blockers
 
 The owner supplied a production Supabase table-size report on 2026-09-27. The dashboard showed about 116% of the 500 MB database quota and 4.597 GB of monthly log ingestion against a 1 GB included amount. The largest relations were:
