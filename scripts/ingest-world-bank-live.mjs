@@ -90,6 +90,28 @@ function ageDays(observedAt, asOf) {
   )
 }
 
+async function fetchPersistedWorldBankLatest() {
+  const pageSize = 1000
+  const rows = []
+
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await db
+      .from("live_world_bank_indicator_latest")
+      .select("country_iso3,metric,observed_at")
+      .order("country_iso3", { ascending: true })
+      .order("metric", { ascending: true })
+      .range(offset, offset + pageSize - 1)
+
+    if (page.error) throw page.error
+
+    const batch = page.data ?? []
+    rows.push(...batch)
+    if (batch.length < pageSize) break
+  }
+
+  return rows
+}
+
 const registry = await db
   .from("live_country_registry")
   .select("iso3,country_name")
@@ -227,51 +249,38 @@ console.log({
 })
 
 const asOf = new Date().toISOString()
-const persistedMetricEvidence = {}
-for (const indicator of INDICATORS) {
-  const summary = await db
-    .from("live_world_bank_indicator_latest")
-    .select("country_iso3,metric,observed_at")
-    .eq("metric", indicator.metric)
-    .limit(1000)
-  if (summary.error) throw summary.error
-
-  const rows = summary.data ?? []
-  const yearDistribution = {}
-  let freshOrAgingPeers = 0
-  for (const row of rows) {
-    const year = row.observed_at
-      ? String(new Date(row.observed_at).getUTCFullYear())
-      : "unknown"
-    yearDistribution[year] = (yearDistribution[year] ?? 0) + 1
-    if (ageDays(row.observed_at, asOf) <= 800) {
-      freshOrAgingPeers++
-    }
-  }
-
-  persistedMetricEvidence[indicator.metric] = {
-    latest_country_rows: rows.length,
-    fresh_or_aging_peer_count: freshOrAgingPeers,
-    latest_year_distribution: yearDistribution,
-  }
-}
-
+const latestRows = await fetchPersistedWorldBankLatest()
+const persistedMetricEvidence = Object.fromEntries(
+  INDICATORS.map((indicator) => [
+    indicator.metric,
+    {
+      latest_country_rows: 0,
+      fresh_or_aging_peer_count: 0,
+      latest_year_distribution: {},
+    },
+  ]),
+)
 const allCountries = new Set()
-for (const evidence of Object.values(persistedMetricEvidence)) {
-  if (evidence.latest_country_rows > 0) {
-    // Aggregate country count is reported separately below from the view.
-  }
-}
-const countrySummary = await db
-  .from("live_world_bank_indicator_latest")
-  .select("country_iso3")
-  .limit(1000)
-if (countrySummary.error) throw countrySummary.error
-for (const row of countrySummary.data ?? []) {
+
+for (const row of latestRows) {
   if (row.country_iso3) allCountries.add(row.country_iso3)
+
+  const evidence = persistedMetricEvidence[row.metric]
+  if (!evidence) continue
+
+  evidence.latest_country_rows++
+  const year = row.observed_at
+    ? String(new Date(row.observed_at).getUTCFullYear())
+    : "unknown"
+  evidence.latest_year_distribution[year] =
+    (evidence.latest_year_distribution[year] ?? 0) + 1
+  if (ageDays(row.observed_at, asOf) <= 800) {
+    evidence.fresh_or_aging_peer_count++
+  }
 }
 
 console.log({
+  latest_view_row_count: latestRows.length,
   latest_view_country_count_lower_bound: allCountries.size,
   persisted_metric_evidence: persistedMetricEvidence,
 })
