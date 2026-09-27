@@ -1,4 +1,3 @@
-import { createSupabaseContext } from "npm:@supabase/server";
 // Private B2 archive bridge for server-side GRO restore only.
 // The caller must present the authoritative project's service-role key.
 const encoder = new TextEncoder();
@@ -13,15 +12,19 @@ async function hmac(key: Uint8Array | string, value: string): Promise<Uint8Array
 
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
-  const { data: context, error: authError } = await createSupabaseContext(request, { auth: "secret" });
-  if (authError || !context) return new Response("Unauthorized", { status: 401 });
+  const token = request.headers.get("authorization")?.replace(/^Bearer /, "");
+  if (!token || token.split(".").length !== 3) return new Response("Unauthorized", { status: 401 });
+  // JWT signature is validated by the Supabase gateway (verify_jwt=true).
+  let role: unknown;
+  try { role = JSON.parse(atob(token.split(".")[1])).role; } catch { return new Response("Unauthorized", { status: 401 }); }
+  if (role !== "service_role") return new Response("Forbidden", { status: 403 });
   try {
     const { object_id: id } = await request.json();
     if (typeof id !== "string" || !/^gro_[A-Za-z0-9_]+$/.test(id)) {
       return new Response("Invalid object ID", { status: 400 });
     }
-    const access = Deno.env.get("B2_ARCHIVE_READ_KEY_ID");
-    const secret = Deno.env.get("B2_ARCHIVE_READ_APPLICATION_KEY");
+    const access = Deno.env.get("B2_ARCHIVE_READ_KEY_ID")?.trim();
+    const secret = Deno.env.get("B2_ARCHIVE_READ_APPLICATION_KEY")?.trim();
     if (!access || !secret) throw new Error("Archive read credentials unavailable");
     const host = "s3.us-east-005.backblazeb2.com";
     const path = `/geomacro-private-archive/geomacro-evidence/v1/gro/${id}.json.gz`;
