@@ -44,17 +44,24 @@ async function verifyArchive() {
   return compressed;
 }
 const archived = await verifyArchive();
-const { data: source, error: sourceError } = await db.storage.from(row.storage_bucket).download(row.object_path);
-if (sourceError || !source || sha(Buffer.from(await source.arrayBuffer())) !== sha(archived)) {
-  throw new Error("CANARY_SOURCE_MISMATCH");
-}
-const { data: removed, error: removeError } = await db.storage.from(row.storage_bucket).remove([row.object_path]);
-if (removeError || removed?.length !== 1 || removed[0]?.name !== row.object_path) {
-  throw new Error("CANARY_STORAGE_REMOVE_UNCONFIRMED");
+const storage = db.storage.from(row.storage_bucket);
+const isMissing = (error) => String(error?.statusCode ?? error?.status) === "404";
+const { data: metadata, error: metadataError } = await storage.info(row.object_path);
+if (metadata) {
+  const { data: source, error: sourceError } = await storage.download(row.object_path);
+  if (sourceError || !source || sha(Buffer.from(await source.arrayBuffer())) !== sha(archived)) {
+    throw new Error("CANARY_SOURCE_MISMATCH");
+  }
+  const { data: removed, error: removeError } = await storage.remove([row.object_path]);
+  if (removeError || removed?.length !== 1 || removed[0]?.name !== row.object_path) {
+    throw new Error("CANARY_STORAGE_REMOVE_UNCONFIRMED");
+  }
+} else if (!isMissing(metadataError) || process.env.RECOVER_CANARY_ID !== id) {
+  throw new Error("CANARY_SOURCE_METADATA_MISSING");
 }
 await verifyArchive();
-const { data: residual } = await db.storage.from(row.storage_bucket).download(row.object_path);
-if (residual) throw new Error("CANARY_SOURCE_STILL_PRESENT");
+const { data: residualMetadata, error: residualError } = await storage.info(row.object_path);
+if (residualMetadata || !isMissing(residualError)) throw new Error("CANARY_SOURCE_STILL_PRESENT");
 const deletionProof = { schema: "geomacro.archive-source-deletion.v1", snapshot_id: id,
   source_bucket: row.storage_bucket, source_path: row.object_path,
   archive_key: proof.archive_key, archive_proof_key: proofKey,
