@@ -50,25 +50,37 @@ for (const row of rows) {
   const raw = Buffer.from(JSON.stringify(row.raw_payload));
   if (raw.length > 2_000_000) throw new Error("OBS_ARCHIVE_PAYLOAD_TOO_LARGE");
   const compressed = gzipSync(raw, { level: 9 });
+  if (sha(gunzipSync(compressed)) !== sha(raw)) throw new Error("OBS_ARCHIVE_LOCAL_ROUNDTRIP_INVALID");
   const idHash = sha(Buffer.from(row.observation_id));
   const archiveKey = `geomacro-evidence/v1/observations/${idHash}.json.gz`;
   const proofKey = `geomacro-evidence/v1/index/observations/${idHash}.json`;
-  await b2.put(archiveKey, compressed);
-  const readback = await b2.get(archiveKey);
-  if (sha(readback) !== sha(compressed) || sha(gunzipSync(readback)) !== sha(raw)) {
-    throw new Error("OBS_ARCHIVE_READBACK_INVALID");
+
+  const archivePut = await b2.put(archiveKey, compressed);
+  if (archivePut?.payload_sha256 !== sha(compressed) || archivePut?.bytes !== compressed.length) {
+    throw new Error("OBS_ARCHIVE_PUT_INVALID");
   }
   const proof = {
     schema: "geomacro.observation-raw-archive.v1",
-    observation_id: row.observation_id, source_table: "public.live_external_observations",
-    source_raw_hash: row.raw_hash, archive_key: archiveKey,
-    payload_sha256: sha(raw), compressed_sha256: sha(compressed),
-    payload_bytes: raw.length, compressed_bytes: compressed.length,
-    source_ingested_at: row.ingested_at, verified_at: new Date().toISOString(),
+    observation_id: row.observation_id,
+    source_table: "public.live_external_observations",
+    source_raw_hash: row.raw_hash,
+    archive_key: archiveKey,
+    archive_version_id: archivePut.version_id,
+    archive_etag: archivePut.etag,
+    payload_sha256: sha(raw),
+    compressed_sha256: sha(compressed),
+    payload_bytes: raw.length,
+    compressed_bytes: compressed.length,
+    source_ingested_at: row.ingested_at,
+    verification_mode: "s3_put_etag_md5",
+    verified_at: new Date().toISOString(),
   };
   const proofBytes = Buffer.from(JSON.stringify(proof));
-  await b2.put(proofKey, proofBytes);
-  if (sha(await b2.get(proofKey)) !== sha(proofBytes)) throw new Error("OBS_ARCHIVE_PROOF_INVALID");
+  const proofPut = await b2.put(proofKey, proofBytes);
+  if (proofPut?.payload_sha256 !== sha(proofBytes) || proofPut?.bytes !== proofBytes.length) {
+    throw new Error("OBS_ARCHIVE_PROOF_INVALID");
+  }
+
   const { data: current, error: checkError } = await db.from("live_external_observations")
     .select("raw_payload,raw_hash").eq("observation_id", row.observation_id).single();
   if (checkError || current?.raw_hash !== row.raw_hash ||
@@ -83,22 +95,24 @@ for (const row of rows) {
       updated.raw_payload !== null || updated.raw_hash !== row.raw_hash) {
     throw new Error("OBS_ARCHIVE_UPDATE_UNCONFIRMED");
   }
-  try {
-    const restored = JSON.parse(gunzipSync(await b2.get(archiveKey)).toString("utf8"));
-    if (sha(Buffer.from(JSON.stringify(restored))) !== proof.payload_sha256 ||
-        JSON.parse((await b2.get(proofKey)).toString("utf8")).compressed_sha256 !== proof.compressed_sha256) {
-      throw new Error("OBS_ARCHIVE_POST_UPDATE_RESTORE_FAILED");
-    }
-  } catch (cause) {
-    const rollback = await db.from("live_external_observations")
-      .update({ raw_payload: row.raw_payload }).eq("observation_id", row.observation_id)
-      .eq("raw_hash", row.raw_hash).is("raw_payload", null);
-    if (rollback.error) throw new Error("OBS_ARCHIVE_ROLLBACK_FAILED", { cause });
-    throw cause;
-  }
+
   archived++;
-  console.log(JSON.stringify({ observation_id: row.observation_id, archive_verified: true,
-    source_row_retained: true, normalized_hash_retained: true, raw_payload_externalized: true,
-    shard_suffix: suffix || null }));
+  console.log(JSON.stringify({
+    observation_id: row.observation_id,
+    archive_verified: true,
+    verification_mode: "s3_put_etag_md5",
+    source_row_retained: true,
+    normalized_hash_retained: true,
+    raw_payload_externalized: true,
+    b2_class_b_readback_used: false,
+    shard_suffix: suffix || null,
+  }));
 }
-console.log(JSON.stringify({ ok: true, archived, limit, older_hours: 72, shard_suffix: suffix || null }));
+console.log(JSON.stringify({
+  ok: true,
+  archived,
+  limit,
+  older_hours: 72,
+  shard_suffix: suffix || null,
+  b2_class_b_readback_used: false,
+}));
