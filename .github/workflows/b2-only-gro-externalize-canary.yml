@@ -1,3 +1,4 @@
+# Re-trigger after bounded transient B2 retry support landed on main.
 name: Signed GRO B2-only externalization automation
 
 on:
