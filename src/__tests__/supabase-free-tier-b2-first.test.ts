@@ -34,7 +34,7 @@ describe("Supabase free-tier B2-first storage contract", () => {
 
   it("runs bounded hourly maintenance with production-scoped B2 secrets", () => {
     expect(workflow).toContain('cron: "17 * * * *"');
-    expect(workflow).toContain('B2_RAW_MAINTENANCE_LIMIT: "25"');
+    expect(workflow).toContain('B2_RAW_MAINTENANCE_LIMIT: "100"');
     expect(workflow).toContain("B2_APPLICATION_KEY");
     expect(workflow).toContain("environment: production");
   });

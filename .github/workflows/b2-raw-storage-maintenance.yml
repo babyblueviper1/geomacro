@@ -20,7 +20,7 @@ jobs:
   archive_and_prune:
     if: ${{ github.repository == 'blocknine0/geomacro' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     environment: production
     env:
       APP_SUPABASE_URL: ${{ secrets.APP_SUPABASE_URL }}
@@ -28,7 +28,7 @@ jobs:
       B2_S3_ENDPOINT: https://s3.us-east-005.backblazeb2.com
       B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
       B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
-      B2_RAW_MAINTENANCE_LIMIT: "25"
+      B2_RAW_MAINTENANCE_LIMIT: "100"
 
     steps:
       - name: Checkout canonical main
@@ -44,5 +44,5 @@ jobs:
       - name: Install locked dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
-      - name: Archive and remove a bounded raw Storage batch
+      - name: Archive and remove up to 100 raw Storage objects
         run: node scripts/ops/b2-raw-storage-maintenance.mjs

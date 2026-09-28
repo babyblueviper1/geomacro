@@ -21,7 +21,7 @@ jobs:
   externalize_verified_batch:
     if: ${{ github.repository == 'blocknine0/geomacro' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     environment: production
     env:
       APP_SUPABASE_URL: ${{ secrets.APP_SUPABASE_URL }}
@@ -39,12 +39,12 @@ jobs:
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile --ignore-scripts
-      - name: Externalize up to 25 expired signed GROs, one verified object at a time
+      - name: Externalize up to 100 expired signed GROs, one verified object at a time
         shell: bash
         run: |
           set -euo pipefail
-          for i in $(seq 1 25); do
-            echo "Verified GRO archive iteration ${i}/25"
+          for i in $(seq 1 100); do
+            echo "Verified GRO archive iteration ${i}/100"
             output="$(bun scripts/ops/b2-only-gro-externalize-canary.ts)"
             echo "$output"
             if echo "$output" | grep -q '"status":"complete"'; then
