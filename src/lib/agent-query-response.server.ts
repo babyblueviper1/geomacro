@@ -13,6 +13,7 @@ import { evaluateCountryRiskGate } from "./risk-gate-service.server";
 import { evaluateCorridorRiskGate } from "./corridor-risk-gate-service.server";
 import { readPublicGlobalRisk } from "./global-risk-read.server";
 import { loadStructuralContext } from "./structural-context.server";
+import { buildDecisionIntelligence } from "./decision-intelligence-output";
 import {
   GEOMACRO_INTELLIGENCE_CONTRACT_VERSION,
   GEOMACRO_INTELLIGENCE_PRICE_USDC,
@@ -179,7 +180,6 @@ async function structuralSubject(plan: AgentQueryPlan, subject: AgentQueryPlan["
       };
       continue;
     }
-
 
     if (module === "critical_minerals" && !structuralFresh) {
       const fallback = await loadAgentCriticalMineralsModule({
@@ -767,6 +767,32 @@ export async function assembleAgentQueryResponse(input: {
   }));
   const currentStates = await buildCurrentState(plan, structural, riskObjects, hotTopics);
   const adaptiveAnalysis = intentAnalysis(plan, riskObjects);
+  const responseAsOf = plan.as_of ?? new Date().toISOString();
+  const decisionIntelligence = currentStates.map((state) => {
+    const risk = state.risk;
+    return buildDecisionIntelligence({
+      subject: state.subject,
+      state_version: state.state_version,
+      risk: risk
+        ? {
+            score: risk.risk.score,
+            label: risk.risk.label,
+            previous_score: risk.risk.previous_score ?? null,
+            delta: risk.risk.delta ?? null,
+            direction: risk.risk.direction ?? null,
+          }
+        : null,
+      confidence: risk?.confidence ?? null,
+      observed_at: risk?.observed_at ?? null,
+      expires_at: risk?.expires_at ?? null,
+      attribution: risk?.attribution ?? [],
+      developments: state.developments,
+      structural: state.structural,
+      live: state.live,
+      risk_gate_decision: null,
+      as_of: responseAsOf,
+    });
+  });
 
   const core = {
     schema_version: GEOMACRO_INTELLIGENCE_RESPONSE_SCHEMA,
@@ -783,7 +809,7 @@ export async function assembleAgentQueryResponse(input: {
       change: plan.change,
     },
     subjects: plan.subjects,
-    as_of: plan.as_of ?? new Date().toISOString(),
+    as_of: responseAsOf,
     analysis: adaptiveAnalysis,
     structural: structural.map(({ stateVersionInputHash: _stateVersionInputHash, ...publicRow }) => publicRow),
     hot_topics: publicHotTopics,
@@ -791,6 +817,7 @@ export async function assembleAgentQueryResponse(input: {
     signed_risk_objects: riskObjects.map(publicRiskObjectAttestation),
     gri_context: gri,
     current_state: currentStates,
+    decision_intelligence: decisionIntelligence,
     answer: buildDirectAnswer(
       plan,
       currentStates,
@@ -809,6 +836,7 @@ export async function assembleAgentQueryResponse(input: {
       intent_method: "deterministic-governed-v1",
       ranking_metric: plan.ranking?.metric ?? null,
       change_baseline: plan.change?.baseline ?? null,
+      customer_facing_output: "decision_intelligence_v1",
     },
     limitations: {
       execution_authorized: false,
