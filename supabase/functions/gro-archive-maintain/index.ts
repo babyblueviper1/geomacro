@@ -83,8 +83,8 @@ Deno.serve(async request => {
   if (role !== "service_role") return new Response("Forbidden", { status: 403 });
   const url = Deno.env.get("SUPABASE_URL");
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const access = Deno.env.get("B2_ARCHIVE_WRITE_KEY_ID");
-  const secret = Deno.env.get("B2_ARCHIVE_WRITE_APPLICATION_KEY");
+  const access = Deno.env.get("B2_ARCHIVE_WRITE_KEY_ID")?.trim();
+  const secret = Deno.env.get("B2_ARCHIVE_WRITE_APPLICATION_KEY")?.trim();
   if (!url || !service || !access || !secret || new URL(url).hostname !== "ldpwajisioljyjtojvfx.supabase.co") {
     return new Response("Archive configuration unavailable", { status: 503 });
   }
@@ -141,7 +141,7 @@ Deno.serve(async request => {
     }
     return Response.json({ ok: true, processed });
   } catch (error) {
-    console.error("GRO_ARCHIVE_MAINTENANCE_FAILED", error instanceof Error ? error.message : "unknown");
+    console.error("GRO_ARCHIVE_MAINTENANCE_FAILED", error instanceof Error ? error.name : "unknown");
     return Response.json({ ok: false, error: "Archive maintenance stopped; inspect function logs" }, { status: 502 });
   }
 });
