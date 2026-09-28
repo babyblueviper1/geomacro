@@ -10,8 +10,9 @@ on:
       - "supabase/migrations/920_multi_source_commercial_registry.sql"
       - "supabase/migrations/925_enable_eurostat_sovereign_fiscal_signals.sql"
   workflow_dispatch:
-  schedule:
-    - cron: "37 3 * * *"
+  # Emergency Supabase quota hold. The global country census performs thousands
+  # of governed reads per run, so keep recovery manually runnable and change-
+  # triggered while recurring proof is paused above the free-tier target.
 
 permissions:
   contents: read
