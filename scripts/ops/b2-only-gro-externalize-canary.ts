@@ -10,7 +10,8 @@ import { getRiskObjectByObjectId } from "../../src/lib/risk-object-store.server"
 const sha = (value: Buffer) => createHash("sha256").update(value).digest("hex");
 const url = process.env.APP_SUPABASE_URL;
 const role = process.env.APP_SUPABASE_SERVICE_ROLE_KEY;
-if (url !== "https://ldpwajisioljyjtojvfx.supabase.co" || !role) throw new Error("B2_ONLY_GRO_CONFIG_INVALID");
+const activeSigningKeyId = String(process.env.RISK_OBJECT_SIGNING_KEY_ID ?? "").trim();
+if (url !== "https://ldpwajisioljyjtojvfx.supabase.co" || !role || !activeSigningKeyId) throw new Error("B2_ONLY_GRO_CONFIG_INVALID");
 const db = createClient(url, role, { auth: { persistSession: false, autoRefreshToken: false } });
 const b2 = createB2Client({ endpointUrl: process.env.B2_S3_ENDPOINT,
   accessKey: process.env.B2_KEY_ID, secretKey: process.env.B2_APPLICATION_KEY,
@@ -20,15 +21,16 @@ if (!keyResponse.ok) throw new Error("B2_ONLY_GRO_KEYS_UNAVAILABLE");
 const keyBody = await keyResponse.json() as { keys?: Array<{ key_id: string; public_key_spki_b64: string; status: "active" | "retired" | "revoked"; not_before?: string | null; not_after?: string | null }> };
 const keys: RiskObjectVerificationKeys = Object.fromEntries((keyBody.keys ?? [])
   .map(({ key_id, ...record }) => [key_id, record]));
+if (!keys[activeSigningKeyId]) throw new Error("B2_ONLY_GRO_ACTIVE_KEY_NOT_PUBLISHED");
 const cutoff = new Date(Date.now() - 6 * 3_600_000).toISOString();
 const { data: rows, error } = await db.from("geomacro_risk_objects")
   .select("object_id,payload,payload_hash,signature,signing_key_id,expires_at,archive_key")
   .is("archive_key", null).not("payload", "is", null)
-  .not("signing_key_id", "is", null).not("signature", "is", null)
-  .lt("expires_at", cutoff).order("generated_at", { ascending: true }).limit(10);
+  .eq("signing_key_id", activeSigningKeyId).not("signature", "is", null)
+  .lt("expires_at", cutoff).order("generated_at", { ascending: true }).limit(100);
 if (error) throw error;
 if (!rows?.length) {
-  console.log(JSON.stringify({ ok: true, status: "complete", processed: 0 }));
+  console.log(JSON.stringify({ ok: true, status: "complete", processed: 0, signing_key_id: activeSigningKeyId }));
   process.exit(0);
 }
 const row = rows.find(candidate => /^gro_[A-Za-z0-9_]+$/.test(candidate.object_id) &&
@@ -88,4 +90,5 @@ try {
   throw cause;
 }
 console.log(JSON.stringify({ ok: true, object_id: id, b2_only: true,
-  source_row_retained: true, signed_restore_verified: true, compressed_bytes: compressed.length }));
+  source_row_retained: true, signed_restore_verified: true, signing_key_id: activeSigningKeyId,
+  compressed_bytes: compressed.length }));
