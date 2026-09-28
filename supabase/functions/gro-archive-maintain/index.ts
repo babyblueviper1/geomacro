@@ -143,7 +143,9 @@ Deno.serve(async request => {
     }
     return Response.json({ ok: true, processed });
   } catch (error) {
-    console.error("GRO_ARCHIVE_MAINTENANCE_FAILED", error instanceof Error ? error.name : "unknown");
-    return Response.json({ ok: false, error: "Archive maintenance stopped; inspect function logs" }, { status: 502 });
+    const code = error instanceof Error && /^(?:SOURCE|KEY|B2|STORAGE|ARCHIVE|PROOF|POINTER)_[A-Z0-9_]+$/.test(error.message)
+      ? error.message : "UNEXPECTED_ERROR";
+    console.error("GRO_ARCHIVE_MAINTENANCE_FAILED", code);
+    return Response.json({ ok: false, error: code }, { status: 502 });
   }
 });
