@@ -7,6 +7,7 @@
   "canonical_x402_discovery": "https://geomacro.live/.well-known/x402.json",
   "x402_extensionless_compatibility_alias": "https://geomacro.live/.well-known/x402",
   "canonical_openapi": "https://geomacro.live/openapi-x402.json",
+  "canonical_decision_intelligence_contract": "config/decision-intelligence-commercial-contract.json",
   "canonical_availability_endpoint": "https://geomacro.live/api/x402/risk/availability",
   "canonical_paid_endpoint": "https://geomacro.live/api/x402/intelligence",
   "canonical_circle_paid_endpoint": "https://geomacro.live/api/x402/circle/intelligence",
@@ -125,11 +126,12 @@
     }
   },
   "submission_identity": {
-    "service_name": "Geomacro Risk Intelligence",
+    "service_name": "Geomacro Decision Intelligence",
     "website": "https://geomacro.live",
     "contact_email": "contact@geomacro.live",
-    "short_description": "Machine-readable geopolitical and macro risk intelligence for country, directional-corridor and financial-agent pre-flight decisions.",
-    "long_description": "Geomacro provides source-governed geopolitical and macro risk intelligence to software and AI agents. Requests are checked for current deliverability, freshness and commercial source eligibility before payment is requested. Paid delivery can include structured risk context, signed Risk Objects and non-executing Risk Gate decision context. Geomacro does not custody funds, sign customer transactions or replace sanctions screening, legal advice or counterparty due diligence.",
+    "short_description": "Decision-ready geopolitical, macro and corridor intelligence for software and AI agents: what changed, why it matters, and what to watch next.",
+    "long_description": "Geomacro turns source-governed geopolitical, macroeconomic and corridor evidence into concise Decision Intelligence for software and AI agents. Each payable response is checked for current deliverability, freshness and commercial source eligibility before payment is requested, then returns a structured answer with the Geomacro-detected cause, material drivers, why-it-matters context, bounded decision guardrail, change attribution, watch-next signals, confidence, freshness and state continuity. Geomacro delivers derived intelligence rather than raw upstream data, and can include independently verifiable signed Risk Objects and non-executing Risk Gate context. Geomacro does not custody funds, sign customer transactions, replace sanctions screening, provide legal or financial advice, or authorize execution.",
+    "differentiation": "Geomacro is designed as a Decision Intelligence layer rather than a raw-data feed: it explains the current state, the verified cause, what materially changed, why the change matters, and what should be watched next in one compact machine-readable object.",
     "approved_endpoint_paths": [
       "/api/x402/intelligence",
       "/api/x402/circle/intelligence"
@@ -149,12 +151,17 @@
       "/llms.txt"
     ],
     "keywords": [
+      "decision intelligence",
+      "AI agent decision intelligence",
       "geopolitical risk",
       "macroeconomic risk",
       "country risk",
       "sovereign risk",
+      "FX risk",
       "treasury pre-flight risk",
       "cross-border corridor risk",
+      "change attribution",
+      "watch next",
       "signed risk object",
       "machine-readable risk evidence",
       "risk gate",
