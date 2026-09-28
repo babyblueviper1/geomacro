@@ -31,11 +31,11 @@ const b2 = createB2Client({
   bucket: "geomacro-private-archive",
 });
 
-async function archiveRead(id, part, sourcePath) {
+async function archiveRead(id, sourcePath) {
   const response = await fetch(`${url}/functions/v1/archive-verify-read`, {
     method: "POST",
     headers: { authorization: `Bearer ${role}`, "content-type": "application/json" },
-    body: JSON.stringify({ kind: "raw", id, part, source_path: sourcePath }),
+    body: JSON.stringify({ kind: "raw", id, part: "archive", source_path: sourcePath }),
     signal: AbortSignal.timeout(20_000),
   });
   if (!response.ok) throw new Error(`B2_RAW_VERIFY_READ_FAILED_${response.status}`);
@@ -111,7 +111,7 @@ for (const row of rows) {
   const deletionKey = `geomacro-evidence/v1/index/raw-deleted/${id}.json`;
 
   await b2.put(archiveKey, compressed);
-  const readback = await archiveRead(id, "archive", path);
+  const readback = await archiveRead(id, path);
   const restored = gunzipSync(readback);
   if (
     readback.length !== compressed.length ||
@@ -136,13 +136,11 @@ for (const row of rows) {
     source_fetched_at: fetchedAt,
     verified_at: new Date().toISOString(),
   };
-  const proofBytes = Buffer.from(JSON.stringify(proof));
-  await b2.put(proofKey, proofBytes);
-  const proofReadback = await archiveRead(id, "proof", path);
-  if (sha(proofReadback) !== sha(proofBytes)) {
-    throw new Error(`B2_RAW_ARCHIVE_PROOF_INVALID_${id}`);
-  }
+  await b2.put(proofKey, Buffer.from(JSON.stringify(proof)));
 
+  // The archive itself has already been fully downloaded, decompressed and
+  // hash-verified before cleanup. The proof and deletion records are append-only
+  // evidence, so successful signed PUTs avoid unnecessary Class-B downloads.
   const { data: removed, error: removeError } = await storage.remove([path]);
   if (
     removeError ||
@@ -161,11 +159,6 @@ for (const row of rows) {
     throw new Error(`B2_RAW_SOURCE_STILL_PRESENT_${id}`, { cause: presenceError });
   }
 
-  // Deletion proof is append-only evidence written after the source is already
-  // absent. A successful signed PUT is sufficient here; re-downloading this
-  // small proof would spend an extra Class-B transaction without increasing
-  // pre-cleanup safety, because archive+proof+restore were fully read-verified
-  // before storage.remove().
   const deletion = {
     schema: "geomacro.archive-source-deletion.v1",
     snapshot_id: id,
@@ -183,10 +176,9 @@ for (const row of rows) {
   console.log(JSON.stringify({
     snapshot_id: id,
     archive_verified: true,
-    proof_verified: true,
     supabase_source_absent: true,
     restore_contract_preserved: true,
-    post_delete_duplicate_read_avoided: true,
+    b2_gets_per_object: 1,
     compressed_bytes: compressed.length,
     shard_suffix: suffix,
   }));
@@ -201,5 +193,5 @@ console.log(JSON.stringify({
   shard_suffix: suffix,
   source_manifest_rows_preserved: true,
   storage_deletion_via_api_only: true,
-  verification_mode: "full-archive-and-proof-readback-before-delete",
+  verification_mode: "one-full-archive-readback-before-delete",
 }));
