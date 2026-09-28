@@ -1,4 +1,3 @@
-# Re-trigger after bounded transient B2 retry support landed on main.
 name: B2 raw Storage maintenance
 
 on:
@@ -7,8 +6,9 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/b2-raw-storage-maintenance.yml"
+      - "scripts/ops/b2-raw-storage-maintenance.mjs"
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "45 * * * *"
 
 permissions:
   contents: read
@@ -20,8 +20,14 @@ concurrency:
 jobs:
   archive_and_prune:
     if: ${{ github.repository == 'blocknine0/geomacro' && github.ref == 'refs/heads/main' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        suffix: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"]
+    name: archive_and_prune_${{ matrix.suffix }}
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 25
     environment: production
     env:
       APP_SUPABASE_URL: ${{ secrets.APP_SUPABASE_URL }}
@@ -29,7 +35,8 @@ jobs:
       B2_S3_ENDPOINT: https://s3.us-east-005.backblazeb2.com
       B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
       B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
-      B2_RAW_MAINTENANCE_LIMIT: "100"
+      B2_RAW_MAINTENANCE_LIMIT: "2"
+      B2_RAW_MAINTENANCE_SUFFIX: ${{ matrix.suffix }}
 
     steps:
       - name: Checkout canonical main
@@ -45,5 +52,5 @@ jobs:
       - name: Install locked dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
-      - name: Archive and remove up to 100 raw Storage objects
+      - name: Archive and remove verified raw Storage shard
         run: node scripts/ops/b2-raw-storage-maintenance.mjs
