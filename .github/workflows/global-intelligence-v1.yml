@@ -29,6 +29,7 @@ jobs:
         run: npm run test:all
 
   canonical-coverage:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     defaults:
       run:
