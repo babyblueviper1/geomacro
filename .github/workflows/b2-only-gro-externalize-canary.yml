@@ -3,7 +3,7 @@ name: Signed GRO B2-only externalization automation
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "*/15 * * * *"
   workflow_dispatch:
   push:
     branches: [main]

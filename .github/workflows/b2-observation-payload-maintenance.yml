@@ -1,12 +1,7 @@
-# Re-trigger after bounded transient B2 retry support landed on main.
-name: B2 raw Storage maintenance
+name: B2 observation raw payload maintenance
 
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/b2-raw-storage-maintenance.yml"
   schedule:
     - cron: "*/10 * * * *"
 
@@ -14,14 +9,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: geomacro-b2-raw-storage-maintenance
+  group: geomacro-b2-observation-archive
   cancel-in-progress: false
 
 jobs:
-  archive_and_prune:
+  archive_verified_batch:
     if: ${{ github.repository == 'blocknine0/geomacro' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 25
     environment: production
     env:
       APP_SUPABASE_URL: ${{ secrets.APP_SUPABASE_URL }}
@@ -29,7 +24,7 @@ jobs:
       B2_S3_ENDPOINT: https://s3.us-east-005.backblazeb2.com
       B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
       B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
-      B2_RAW_MAINTENANCE_LIMIT: "100"
+      OBS_ARCHIVE_LIMIT: "10"
 
     steps:
       - name: Checkout canonical main
@@ -45,5 +40,17 @@ jobs:
       - name: Install locked dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
-      - name: Archive and remove up to 100 raw Storage objects
-        run: node scripts/ops/b2-raw-storage-maintenance.mjs
+      - name: Archive verified observation payloads to B2
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 10); do
+            echo "Observation archive batch ${i}/10"
+            output="$(node scripts/ops/b2-archive-observation-payload-batch.mjs)"
+            echo "$output"
+            archived="$(printf '%s\n' "$output" | jq -r 'select(.ok == true) | .archived' | tail -n1)"
+            if [ -z "$archived" ] || [ "$archived" = "0" ]; then
+              echo "No more eligible observation payloads in this run."
+              break
+            fi
+          done
