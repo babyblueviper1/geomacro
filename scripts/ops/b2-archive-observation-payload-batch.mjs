@@ -3,7 +3,6 @@
 // No row deletion; normalized fields and hashes remain available.
 import { createHash } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
-import { setTimeout as sleep } from "node:timers/promises";
 import { createClient } from "@supabase/supabase-js";
 import { createB2Client } from "./b2-s3-client.mjs";
 
@@ -14,35 +13,20 @@ const limit = Number(process.env.OBS_ARCHIVE_LIMIT ?? 1);
 const suffix = String(process.env.OBS_ARCHIVE_SUFFIX ?? "").trim().toLowerCase();
 if (url !== "https://ldpwajisioljyjtojvfx.supabase.co" || !role ||
     !Number.isInteger(limit) || limit < 1 || limit > 10 ||
-    (suffix && !/^[0-9a-f]$/.test(suffix))) throw new Error("OBS_ARCHIVE_CONFIG_INVALID");
+    !/^[0-9a-f]$/.test(suffix)) throw new Error("OBS_ARCHIVE_CONFIG_INVALID");
 const db = createClient(url, role, { auth: { persistSession: false, autoRefreshToken: false } });
 const b2 = createB2Client({ endpointUrl: process.env.B2_S3_ENDPOINT,
   accessKey: process.env.B2_KEY_ID, secretKey: process.env.B2_APPLICATION_KEY,
   bucket: "geomacro-private-archive" });
-const cutoff = new Date(Date.now() - 72 * 3_600_000).toISOString();
 
-async function selectRows() {
-  for (let attempt = 1; attempt <= 4; attempt++) {
-    let query = db.from("live_external_observations")
-      .select("observation_id,raw_payload,raw_hash,ingested_at")
-      .not("raw_payload", "is", null).lt("ingested_at", cutoff);
-    if (suffix) query = query.like("observation_id", `%${suffix}`);
-    const result = await query.order("ingested_at", { ascending: true }).limit(limit);
-    if (!result.error) return result.data ?? [];
-    const transient = result.error.code === "57014" || /statement timeout/i.test(result.error.message ?? "");
-    if (!transient || attempt === 4) throw result.error;
-    const delayMs = 1500 * (2 ** (attempt - 1));
-    console.warn(JSON.stringify({ warning: "OBS_ARCHIVE_SELECT_RETRY", attempt, delay_ms: delayMs,
-      code: result.error.code ?? null, shard_suffix: suffix || null }));
-    await sleep(delayMs);
-  }
-  return [];
-}
-
-const rows = await selectRows();
+const { data: rows, error } = await db.rpc("geomacro_next_observation_archive_candidates", {
+  p_suffix: suffix,
+  p_limit: limit,
+});
+if (error) throw error;
 let archived = 0;
-for (const row of rows) {
-  if (!row.observation_id || (suffix && !String(row.observation_id).toLowerCase().endsWith(suffix)) ||
+for (const row of rows ?? []) {
+  if (!row.observation_id || !String(row.observation_id).toLowerCase().endsWith(suffix) ||
       !/^[a-f0-9]{64}$/.test(row.raw_hash) || !row.raw_payload ||
       Date.now() - Date.parse(row.ingested_at) < 72 * 3_600_000) {
     throw new Error("OBS_ARCHIVE_SOURCE_INVALID");
@@ -99,6 +83,6 @@ for (const row of rows) {
   archived++;
   console.log(JSON.stringify({ observation_id: row.observation_id, archive_verified: true,
     source_row_retained: true, normalized_hash_retained: true, raw_payload_externalized: true,
-    shard_suffix: suffix || null }));
+    shard_suffix: suffix }));
 }
-console.log(JSON.stringify({ ok: true, archived, limit, older_hours: 72, shard_suffix: suffix || null }));
+console.log(JSON.stringify({ ok: true, archived, limit, older_hours: 72, shard_suffix: suffix }));
