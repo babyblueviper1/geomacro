@@ -4,16 +4,16 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("Supabase free-tier B2-first storage contract", () => {
-  const migration = read("supabase/migrations/976_geomacro_free_tier_budget_and_b2_raw_candidates.sql");
+  const contract = read("scripts/ops/sql/geomacro-free-tier-budget-and-b2-raw-candidates.sql");
   const worker = read("scripts/ops/b2-raw-storage-maintenance.mjs");
   const workflow = read(".github/workflows/b2-raw-storage-maintenance.yml");
   const budget = read("scripts/ops/supabase-free-tier-budget.mjs");
 
   it("freezes bulk Supabase writes before the hard free-tier ceiling", () => {
-    expect(migration).toContain("'target_bytes', 367001600");
-    expect(migration).toContain("'warn_bytes', 419430400");
-    expect(migration).toContain("'freeze_bytes', 471859200");
-    expect(migration).toContain("'bulk_write_allowed'");
+    expect(contract).toContain("'target_bytes', 367001600");
+    expect(contract).toContain("'warn_bytes', 419430400");
+    expect(contract).toContain("'freeze_bytes', 471859200");
+    expect(contract).toContain("'bulk_write_allowed'");
     expect(budget).toContain("compact_operational_control_plane");
     expect(budget).toContain("raw_archive_historical_large_payloads");
   });
@@ -22,7 +22,7 @@ describe("Supabase free-tier B2-first storage contract", () => {
     expect(worker).toContain('storage.remove([path])');
     expect(worker).toContain("geomacro_raw_storage_paths_present");
     expect(worker).not.toMatch(/delete\s+from\s+storage\.objects/i);
-    expect(migration).not.toMatch(/delete\s+from\s+storage\.objects/i);
+    expect(contract).not.toMatch(/delete\s+from\s+storage\.objects/i);
   });
 
   it("requires B2 readback and both archive and deletion proofs before declaring progress", () => {
