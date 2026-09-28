@@ -9,6 +9,8 @@ describe("Supabase free-tier B2-first storage contract", () => {
   const workflow = read(".github/workflows/b2-raw-storage-maintenance.yml");
   const observationWorkflow = read(".github/workflows/b2-observation-payload-maintenance.yml");
   const observationWorker = read("scripts/ops/b2-archive-observation-payload-batch.mjs");
+  const groWorkflow = read(".github/workflows/b2-only-gro-externalize-canary.yml");
+  const groWorker = read("scripts/ops/b2-only-gro-externalize-canary.ts");
   const productionCoverageWorkflow = read(".github/workflows/global-production-coverage-gate.yml");
   const orchestratorWorkflow = read(".github/workflows/intelligence-orchestrator.yml");
   const budget = read("scripts/ops/supabase-free-tier-budget.mjs");
@@ -29,27 +31,44 @@ describe("Supabase free-tier B2-first storage contract", () => {
     expect(contract).not.toMatch(/delete\s+from\s+storage\.objects/i);
   });
 
-  it("requires B2 readback and both archive and deletion proofs before declaring progress", () => {
+  it("requires a full B2 archive readback and restore before raw Storage cleanup", () => {
     expect(worker).toContain("B2_RAW_ARCHIVE_READBACK_INVALID");
     expect(worker).toContain("geomacro.archive-proof.v1");
     expect(worker).toContain("geomacro.archive-source-deletion.v1");
+    expect(worker).toContain("b2_gets_per_object: 1");
+    expect(worker.indexOf("const readback = await archiveRead"))
+      .toBeLessThan(worker.indexOf("storage.remove([path])"));
     expect(worker).toContain("supabase_source_absent: true");
   });
 
-  it("runs bounded ten-minute raw maintenance with production-scoped B2 secrets", () => {
-    expect(workflow).toContain('cron: "*/10 * * * *"');
-    expect(workflow).toContain('B2_RAW_MAINTENANCE_LIMIT: "100"');
+  it("shards and throttles raw maintenance within the B2 transaction budget", () => {
+    expect(workflow).toContain('cron: "45 * * * *"');
+    expect(workflow).toContain('B2_RAW_MAINTENANCE_LIMIT: "2"');
+    expect(workflow).toContain("B2_RAW_MAINTENANCE_SUFFIX");
+    expect(workflow).toContain("max-parallel: 2");
+    expect(contract).toContain("geomacro_next_raw_storage_candidates_shard");
+    expect(contract).toContain("live_raw_source_snapshots_b2_archive_shard_idx");
     expect(workflow).toContain("B2_APPLICATION_KEY");
     expect(workflow).toContain("environment: production");
   });
 
-  it("continuously externalizes old observation raw payloads while retaining normalized rows", () => {
-    expect(observationWorkflow).toContain('cron: "*/10 * * * *"');
-    expect(observationWorkflow).toContain('OBS_ARCHIVE_LIMIT: "10"');
-    expect(observationWorkflow).toContain("b2-archive-observation-payload-batch.mjs");
+  it("continuously externalizes old observation payloads with one B2 GET per cleanup", () => {
+    expect(observationWorkflow).toContain('cron: "5 * * * *"');
+    expect(observationWorkflow).toContain('OBS_ARCHIVE_LIMIT: "2"');
+    expect(observationWorkflow).toContain("max-parallel: 2");
     expect(observationWorker).toContain(".update({ raw_payload: null })");
     expect(observationWorker).toContain("OBS_ARCHIVE_READBACK_INVALID");
+    expect(observationWorker).toContain("b2_gets_per_object: 1");
     expect(observationWorker).toContain("source_row_retained: true");
+  });
+
+  it("throttles GRO externalization and verifies restore before payload cleanup", () => {
+    expect(groWorkflow).toContain('cron: "25 * * * *"');
+    expect(groWorkflow).toContain("max-parallel: 2");
+    expect(groWorker).toContain("B2_ONLY_GRO_READBACK_INVALID");
+    expect(groWorker).toContain("b2_gets_per_object: 1");
+    expect(groWorker.indexOf("const readback = await archiveRead"))
+      .toBeLessThan(groWorker.indexOf(".update({ payload: null"));
   });
 
   it("never auto-triggers the heavy production coverage refresh and requires free-tier headroom", () => {
