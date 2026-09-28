@@ -20,7 +20,7 @@ if (!keyResponse.ok) throw new Error("B2_ONLY_GRO_KEYS_UNAVAILABLE");
 const keyBody = await keyResponse.json() as { keys?: Array<{ key_id: string; public_key_spki_b64: string; status: "active" | "retired" | "revoked"; not_before?: string | null; not_after?: string | null }> };
 const keys: RiskObjectVerificationKeys = Object.fromEntries((keyBody.keys ?? [])
   .map(({ key_id, ...record }) => [key_id, record]));
-const cutoff = new Date(Date.now() - 72 * 3_600_000).toISOString();
+const cutoff = new Date(Date.now() - 6 * 3_600_000).toISOString();
 const { data: rows, error } = await db.from("geomacro_risk_objects")
   .select("object_id,payload,payload_hash,signature,signing_key_id,expires_at,archive_key")
   .is("archive_key", null).not("payload", "is", null)
