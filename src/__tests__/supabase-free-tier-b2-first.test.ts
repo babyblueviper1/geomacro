@@ -9,6 +9,7 @@ describe("Supabase free-tier B2-first storage contract", () => {
   const workflow = read(".github/workflows/b2-raw-storage-maintenance.yml");
   const observationWorkflow = read(".github/workflows/b2-observation-payload-maintenance.yml");
   const observationWorker = read("scripts/ops/b2-archive-observation-payload-batch.mjs");
+  const productionCoverageWorkflow = read(".github/workflows/global-production-coverage-gate.yml");
   const budget = read("scripts/ops/supabase-free-tier-budget.mjs");
 
   it("freezes bulk Supabase writes before the hard free-tier ceiling", () => {
@@ -48,5 +49,14 @@ describe("Supabase free-tier B2-first storage contract", () => {
     expect(observationWorker).toContain(".update({ raw_payload: null })");
     expect(observationWorker).toContain("OBS_ARCHIVE_READBACK_INVALID");
     expect(observationWorker).toContain("source_row_retained: true");
+  });
+
+  it("never auto-triggers the heavy production coverage refresh and requires free-tier headroom", () => {
+    expect(productionCoverageWorkflow).toContain("workflow_dispatch:");
+    expect(productionCoverageWorkflow).not.toContain("branches: [main]");
+    expect(productionCoverageWorkflow).not.toContain('supabase/migrations/**');
+    expect(productionCoverageWorkflow).toContain("supabase-free-tier-budget.mjs --require-bulk-write");
+    expect(productionCoverageWorkflow.indexOf("supabase-free-tier-budget.mjs --require-bulk-write"))
+      .toBeLessThan(productionCoverageWorkflow.indexOf("ingest-world-bank-live.mjs"));
   });
 });
