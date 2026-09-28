@@ -18,9 +18,13 @@ async function iso2ForIso3(iso3) {
 
 export async function fetchGeopolitics(question, {countryIso3 = null, countryIso2 = null} = {}) {
   const iso3 = normalizeIso3(countryIso3);
-  if (!iso3 && !countryIso2) throw new Error("countryIso3 or countryIso2 is required for geopolitics.");
+  const explicitIso2 = String(countryIso2 || "").trim().toUpperCase();
+  const iso2 = /^[A-Z]{2}$/.test(explicitIso2)
+    ? explicitIso2
+    : iso3
+      ? await iso2ForIso3(iso3)
+      : null;
 
-  const iso2 = String(countryIso2 || await iso2ForIso3(iso3)).toUpperCase();
   return searchGdelt(iso2, {queryExtra: String(question || "").trim()});
 }
 
