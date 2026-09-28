@@ -2,6 +2,7 @@
 // One signed, expired GRO: B2-only bytes, immutable DB pointer, and live restore.
 import { createHash } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
+import { setTimeout as sleep } from "node:timers/promises";
 import { createClient } from "@supabase/supabase-js";
 import { createB2Client } from "./b2-s3-client.mjs";
 import { canonicalRiskObjectJson, verifyRiskObjectSignature, type RiskObjectVerificationKeys } from "../../src/lib/risk-object-signing.server";
@@ -25,15 +26,29 @@ const keys: RiskObjectVerificationKeys = Object.fromEntries((keyBody.keys ?? [])
   .map(({ key_id, ...record }) => [key_id, record]));
 if (!keys[activeSigningKeyId]) throw new Error("B2_ONLY_GRO_ACTIVE_KEY_NOT_PUBLISHED");
 const cutoff = new Date(Date.now() - 6 * 3_600_000).toISOString();
-let query = db.from("geomacro_risk_objects")
-  .select("object_id,payload,payload_hash,signature,signing_key_id,expires_at,archive_key")
-  .is("archive_key", null).not("payload", "is", null)
-  .eq("signing_key_id", activeSigningKeyId).not("signature", "is", null)
-  .lt("expires_at", cutoff);
-if (suffix) query = query.like("object_id", `%${suffix}`);
-const { data: rows, error } = await query.order("generated_at", { ascending: true }).limit(100);
-if (error) throw error;
-if (!rows?.length) {
+
+async function selectRows() {
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    let query = db.from("geomacro_risk_objects")
+      .select("object_id,payload,payload_hash,signature,signing_key_id,expires_at,archive_key")
+      .is("archive_key", null).not("payload", "is", null)
+      .eq("signing_key_id", activeSigningKeyId).not("signature", "is", null)
+      .lt("expires_at", cutoff);
+    if (suffix) query = query.like("object_id", `%${suffix}`);
+    const result = await query.order("generated_at", { ascending: true }).limit(100);
+    if (!result.error) return result.data ?? [];
+    const transient = result.error.code === "57014" || /statement timeout/i.test(result.error.message ?? "");
+    if (!transient || attempt === 4) throw result.error;
+    const delayMs = 1500 * (2 ** (attempt - 1));
+    console.warn(JSON.stringify({ warning: "GRO_ARCHIVE_SELECT_RETRY", attempt, delay_ms: delayMs,
+      code: result.error.code ?? null, shard_suffix: suffix || null }));
+    await sleep(delayMs);
+  }
+  return [];
+}
+
+const rows = await selectRows();
+if (!rows.length) {
   console.log(JSON.stringify({ ok: true, status: "complete", processed: 0,
     signing_key_id: activeSigningKeyId, shard_suffix: suffix || null }));
   process.exit(0);

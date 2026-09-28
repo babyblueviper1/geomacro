@@ -3,6 +3,7 @@
 // No row deletion; normalized fields and hashes remain available.
 import { createHash } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
+import { setTimeout as sleep } from "node:timers/promises";
 import { createClient } from "@supabase/supabase-js";
 import { createB2Client } from "./b2-s3-client.mjs";
 
@@ -19,15 +20,28 @@ const b2 = createB2Client({ endpointUrl: process.env.B2_S3_ENDPOINT,
   accessKey: process.env.B2_KEY_ID, secretKey: process.env.B2_APPLICATION_KEY,
   bucket: "geomacro-private-archive" });
 const cutoff = new Date(Date.now() - 72 * 3_600_000).toISOString();
-let query = db.from("live_external_observations")
-  .select("observation_id,raw_payload,raw_hash,ingested_at")
-  .not("raw_payload", "is", null).lt("ingested_at", cutoff);
-if (suffix) query = query.like("observation_id", `%${suffix}`);
-const { data: rows, error } = await query
-  .order("ingested_at", { ascending: true }).limit(limit);
-if (error) throw error;
+
+async function selectRows() {
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    let query = db.from("live_external_observations")
+      .select("observation_id,raw_payload,raw_hash,ingested_at")
+      .not("raw_payload", "is", null).lt("ingested_at", cutoff);
+    if (suffix) query = query.like("observation_id", `%${suffix}`);
+    const result = await query.order("ingested_at", { ascending: true }).limit(limit);
+    if (!result.error) return result.data ?? [];
+    const transient = result.error.code === "57014" || /statement timeout/i.test(result.error.message ?? "");
+    if (!transient || attempt === 4) throw result.error;
+    const delayMs = 1500 * (2 ** (attempt - 1));
+    console.warn(JSON.stringify({ warning: "OBS_ARCHIVE_SELECT_RETRY", attempt, delay_ms: delayMs,
+      code: result.error.code ?? null, shard_suffix: suffix || null }));
+    await sleep(delayMs);
+  }
+  return [];
+}
+
+const rows = await selectRows();
 let archived = 0;
-for (const row of rows ?? []) {
+for (const row of rows) {
   if (!row.observation_id || (suffix && !String(row.observation_id).toLowerCase().endsWith(suffix)) ||
       !/^[a-f0-9]{64}$/.test(row.raw_hash) || !row.raw_payload ||
       Date.now() - Date.parse(row.ingested_at) < 72 * 3_600_000) {
@@ -55,7 +69,6 @@ for (const row of rows ?? []) {
   const proofBytes = Buffer.from(JSON.stringify(proof));
   await b2.put(proofKey, proofBytes);
   if (sha(await b2.get(proofKey)) !== sha(proofBytes)) throw new Error("OBS_ARCHIVE_PROOF_INVALID");
-  // Re-read immediately before changing the row, detecting replacement or a concurrent update.
   const { data: current, error: checkError } = await db.from("live_external_observations")
     .select("raw_payload,raw_hash").eq("observation_id", row.observation_id).single();
   if (checkError || current?.raw_hash !== row.raw_hash ||
