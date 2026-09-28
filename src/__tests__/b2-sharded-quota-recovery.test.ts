@@ -10,13 +10,13 @@ const groWorkflow = read(".github/workflows/b2-only-gro-externalize-canary.yml")
 const suffixMatrix = 'suffix: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"]';
 
 describe("sharded B2 quota recovery", () => {
-  it("partitions observation candidates by a validated hexadecimal suffix", () => {
+  it("partitions observation candidates by a validated hexadecimal suffix with bounded DB pressure", () => {
     expect(observationWorker).toContain("OBS_ARCHIVE_SUFFIX");
     expect(observationWorker).toContain("/^[0-9a-f]$/");
     expect(observationWorker).toContain('query.like("observation_id", `%${suffix}`)');
     expect(observationWorker).toContain("endsWith(suffix)");
     expect(observationWorkflow).toContain(suffixMatrix);
-    expect(observationWorkflow).toContain("max-parallel: 8");
+    expect(observationWorkflow).toContain("max-parallel: 4");
     expect(observationWorkflow).toContain("fail-fast: false");
   });
 
