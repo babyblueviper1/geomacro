@@ -39,7 +39,7 @@ describe("sharded B2 quota recovery", () => {
     expect(candidateRpcs).toContain("p_limit > 100");
     expect(candidateRpcs).toContain("to service_role");
     expect(groWorkflow).toContain(suffixMatrix);
-    expect(groWorkflow).toContain("max-parallel: 8");
+    expect(groWorkflow).toContain("max-parallel: 4");
     expect(groWorkflow).toContain("fail-fast: false");
   });
 
