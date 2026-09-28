@@ -8,7 +8,7 @@ on:
       - ".github/workflows/b2-observation-payload-maintenance.yml"
       - "scripts/ops/b2-archive-observation-payload-batch.mjs"
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "5 * * * *"
 
 permissions:
   contents: read
@@ -22,7 +22,7 @@ jobs:
     if: ${{ github.repository == 'blocknine0/geomacro' && github.ref == 'refs/heads/main' }}
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 2
       matrix:
         suffix: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"]
     name: archive_verified_batch_${{ matrix.suffix }}
@@ -35,7 +35,7 @@ jobs:
       B2_S3_ENDPOINT: https://s3.us-east-005.backblazeb2.com
       B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
       B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
-      OBS_ARCHIVE_LIMIT: "10"
+      OBS_ARCHIVE_LIMIT: "2"
       OBS_ARCHIVE_SUFFIX: ${{ matrix.suffix }}
 
     steps:
@@ -53,16 +53,4 @@ jobs:
         run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Archive verified observation payload shard to B2
-        shell: bash
-        run: |
-          set -euo pipefail
-          for i in $(seq 1 5); do
-            echo "Observation shard ${OBS_ARCHIVE_SUFFIX} batch ${i}/5"
-            output="$(node scripts/ops/b2-archive-observation-payload-batch.mjs)"
-            echo "$output"
-            archived="$(printf '%s\n' "$output" | jq -r 'select(.ok == true) | .archived' | tail -n1)"
-            if [ -z "$archived" ] || [ "$archived" = "0" ]; then
-              echo "No more eligible observation payloads for shard ${OBS_ARCHIVE_SUFFIX}."
-              break
-            fi
-          done
+        run: node scripts/ops/b2-archive-observation-payload-batch.mjs
