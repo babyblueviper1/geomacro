@@ -74,7 +74,7 @@ describe("canonical product architecture alignment", () => {
     expect(riskGateDoc).not.toContain("+-- Event scope    -> Event Risk Object direction");
   });
 
-  it("keeps customer identity permissions policy funds and execution customer-controlled", () => {
+  it("keeps customer-controlled execution in the machine architecture while launch pages avoid authorization claims", () => {
     const contract = read("docs/CANONICAL_DELIVERY_ARCHITECTURE.md");
     const architecture = read("src/content/docs/02-product-architecture.md");
     const commercial = read("docs/COMMERCIAL_INTELLIGENCE.md");
@@ -89,12 +89,13 @@ describe("canonical product architecture alignment", () => {
       expect(content).toContain("Customer-controlled action");
     }
 
-    expect(home).toContain("The customer keeps control of policy and execution");
+    expect(home).toContain("Roadmap, not launch promise");
     expect(home).not.toContain("Geomacro authorizes");
+    expect(home).not.toContain("execution_authorized");
     expect(ecosystem).toContain("The customer retains");
     expect(ecosystem).toContain("execution authority and the final decision");
     expect(riskGateRoute).toContain("The customer's own identity, permissions and policy layer applies its rules");
-    expect(institutional).toContain("customer controls execution");
+    expect(institutional).toContain("Risk Gate, paid agent/x402 production access and broader machine delivery remain roadmap or controlled capabilities until separately promoted");
   });
 
   it("keeps machine-facing docs in Risk Gate -> customer policy -> customer action order", () => {
@@ -112,7 +113,7 @@ describe("canonical product architecture alignment", () => {
     }
   });
 
-  it("preserves the non-authorizing Risk Gate boundary everywhere it is commercially described", () => {
+  it("preserves the non-authorizing Risk Gate boundary everywhere it is technically described", () => {
     for (const path of [
       "README.md",
       "src/content/docs/01-what-is-geomacro.md",
@@ -131,18 +132,19 @@ describe("canonical product architecture alignment", () => {
     }
   });
 
-  it("keeps risk intelligence primary and technical-proof surfaces secondary", () => {
+  it("keeps launch risk intelligence primary and machine/testnet capabilities outside the launch promise", () => {
     const home = read("src/components/home/commercial-home.tsx");
     const shell = read("src/components/site-shell.tsx");
-    const about = read("src/routes/about.tsx");
+    const institutional = read("src/routes/institutional.tsx");
     const predictionDocs = read("src/content/docs/34-prediction-markets.md");
 
-    expect(home).toContain("Global risk intelligence infrastructure");
+    expect(home).toContain("Global risk intelligence");
+    expect(home).toContain("Available at launch");
+    expect(home).toContain("Roadmap, not launch promise");
     expect(home).not.toContain("Prediction Markets");
+    expect(home).not.toContain("Bridge and Swap");
     expect(shell).toContain("Technical Proof");
-    expect(shell).toContain('label: "Prediction Markets"');
-    expect(about).toContain("Risk intelligence is the product");
-    expect(about).toContain("separate technical proof");
+    expect(institutional).toContain("Prediction Markets, Bridge and Swap remain separate testnet technical proofs");
     expect(predictionDocs).toContain("TECHNICAL PROOF · ARC TESTNET");
     expect(predictionDocs).toContain("secondary application and feedback layer");
   });
