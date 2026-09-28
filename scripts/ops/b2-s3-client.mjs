@@ -2,6 +2,7 @@ import { createHash, createHmac } from "node:crypto";
 import { parseB2Endpoint } from "./b2-archive-contract.mjs";
 
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const md5 = (bytes) => createHash("md5").update(bytes).digest("hex");
 const hmac = (key, value) => createHmac("sha256", key).update(value).digest();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const TRANSIENT_STATUSES = new Set([429, 500, 502, 503, 504]);
@@ -19,6 +20,7 @@ export function createB2Client({ endpointUrl, accessKey, secretKey, bucket }) {
     const path = `/${[bucket, ...key.split("/")].map(encodeURIComponent).join("/")}`;
     const host = new URL(endpoint.endpoint).host;
     const payloadHash = sha(body);
+    const payloadMd5 = md5(body);
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       const timestamp = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
@@ -45,14 +47,32 @@ export function createB2Client({ endpointUrl, accessKey, secretKey, bucket }) {
           signal: AbortSignal.timeout(60_000),
         });
 
-        if (result.ok) return Buffer.from(await result.arrayBuffer());
+        if (result.ok) {
+          if (method === "PUT") {
+            const etag = String(result.headers.get("etag") ?? "").replace(/^"|"$/g, "").toLowerCase();
+            const versionId = String(result.headers.get("x-amz-version-id") ?? "").trim();
+            if (!/^[a-f0-9]{32}$/.test(etag)) throw new Error("B2_PUT_ETAG_INVALID");
+            if (etag !== payloadMd5) throw new Error("B2_PUT_ETAG_MISMATCH");
+            if (!versionId) throw new Error("B2_PUT_VERSION_ID_MISSING");
+            return {
+              etag,
+              version_id: versionId,
+              payload_md5: payloadMd5,
+              payload_sha256: payloadHash,
+              bytes: body.length,
+            };
+          }
+          return Buffer.from(await result.arrayBuffer());
+        }
+
         if (!TRANSIENT_STATUSES.has(result.status) || attempt === MAX_ATTEMPTS) {
           throw new Error(`B2_${method}_FAILED_${result.status}`);
         }
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         const explicitHttpFailure = /^B2_(PUT|GET)_FAILED_\d+$/.test(message);
-        if (explicitHttpFailure || attempt === MAX_ATTEMPTS) throw cause;
+        const integrityFailure = /^B2_PUT_(ETAG_INVALID|ETAG_MISMATCH|VERSION_ID_MISSING)$/.test(message);
+        if (explicitHttpFailure || integrityFailure || attempt === MAX_ATTEMPTS) throw cause;
       }
 
       await sleep(500 * 2 ** (attempt - 1));
