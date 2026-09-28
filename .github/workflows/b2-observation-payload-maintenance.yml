@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: geomacro-b2-observation-payload-maintenance
+  group: geomacro-b2-observation-archive
   cancel-in-progress: false
 
 jobs:
