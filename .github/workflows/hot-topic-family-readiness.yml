@@ -20,13 +20,8 @@ on:
       - "scripts/audit-hot-topic-family-readiness.ts"
       - ".github/workflows/hot-topic-family-readiness.yml"
   workflow_dispatch:
-  workflow_run:
-    workflows:
-      - "GDELT GAL Live Hot-Topic Sync"
-    types:
-      - completed
-  schedule:
-    - cron: "43 */2 * * *"
+  # Emergency Supabase quota hold: recurring production readiness is manual-only
+  # until database/log/egress recovery returns below the configured free-tier target.
 
 permissions:
   contents: read
@@ -69,10 +64,9 @@ jobs:
           echo 'PASS: governed hot-topic family delivery boundary is static-safe'
 
   production-readiness:
-    # Live readiness requires fresh upstream GDELT state. Serialize with the
-    # canonical orchestrator so readiness never races an in-flight fresh cycle.
-    if: >-
-      ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
+    # Production readiness can be run manually during quota recovery. Keeping it
+    # off recurring schedules prevents repeated Supabase reads/self-heal cycles.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     concurrency:
       group: geomacro-intelligence-orchestrator
       cancel-in-progress: false
