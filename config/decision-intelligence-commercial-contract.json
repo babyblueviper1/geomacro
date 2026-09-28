@@ -1,0 +1,46 @@
+{
+  "schema_version": "geomacro.decision-intelligence-commercial-contract.v1",
+  "response_schema": "geomacro.decision-intelligence.v1",
+  "customer_facing_output": "decision_intelligence_v1",
+  "delivery_boundary": "DERIVED_DECISION_INTELLIGENCE_ONLY",
+  "raw_data_delivered": false,
+  "execution_authorized": false,
+  "cause_prefix": "Geomacro detects this because ",
+  "required_fields": [
+    "status",
+    "risk",
+    "freshness",
+    "answer",
+    "cause",
+    "geomacro_detected",
+    "why_it_matters",
+    "decision",
+    "change",
+    "watch_next",
+    "evidence_quality",
+    "state_version",
+    "as_of"
+  ],
+  "decision_actions": [
+    "PROCEED",
+    "PROCEED_WITH_GUARDRAILS",
+    "REVIEW",
+    "PAUSE",
+    "INSUFFICIENT_EVIDENCE"
+  ],
+  "distribution": {
+    "coinbase_x402": "/api/x402/intelligence",
+    "circle_gateway_x402": "/api/x402/circle/intelligence",
+    "nevermined": "/api/x402/nevermined/intelligence"
+  },
+  "public_openapi_update_state": "HELD_BY_WEBSITE_LOCK",
+  "public_openapi_unlock_required": true,
+  "commercial_rules": {
+    "availability_first": true,
+    "unavailable_is_not_payable": true,
+    "stale_is_not_payable": true,
+    "commercially_ineligible_is_not_payable": true,
+    "raw_upstream_redistribution": false,
+    "state_continuity_preferred_over_warehouse_growth": true
+  }
+}
