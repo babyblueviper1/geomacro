@@ -1,0 +1,47 @@
+{
+  "schema_version": "geomacro-partner-verification-v1",
+  "issuer": "Geomacro",
+  "origin": "https://geomacro.live",
+  "purpose": "External verification and commercial partner integration for signed Geomacro Risk Objects.",
+  "risk_object": {
+    "schema": "gro-1.1",
+    "verification_endpoint": "https://geomacro.live/api/risk-object-keys",
+    "trust_registry": "https://geomacro.live/.well-known/geomacro-risk-keys.json",
+    "jwks": "https://geomacro.live/.well-known/jwks.json",
+    "canonicalization": "geomacro-canonical-json-v1",
+    "signature_scheme": "Ed25519",
+    "tamper_detection_required": true,
+    "freshness_recheck_required": true
+  },
+  "federation": {
+    "supported_profile": "federico-strict-evidence-v1",
+    "positive_control": "test-vectors/federico-strict-positive-control-v1.json",
+    "positive_control_ci": "Federico Strict Positive Control",
+    "minimum_independent_source_families": 2,
+    "receiver_side_verification_required": true,
+    "issuer_attestations_are_not_trust_roots": true,
+    "fail_closed": true
+  },
+  "partner_handoff": {
+    "interoperability_preflight": "scripts/invinoveritas-risk-object-preflight.ts",
+    "commercial_readiness_check": "scripts/check-partner-commercial-readiness.mjs",
+    "documentation": "docs/PARTNER_VERIFICATION_AND_COMMERCIAL_INTEGRATION.md",
+    "external_evidence_binding": "sha256-exact-record",
+    "signed_review_proof_supported": true,
+    "independent_proof_verification_required": true
+  },
+  "commercial_path": {
+    "technical_evaluation": "supported",
+    "production_pilot": "contract_required",
+    "paid_api": "x402-ready",
+    "custom_sla": "contract_required",
+    "ledger_or_attestation_publication": "partner_opt_in",
+    "data_redistribution": "derived-output-only unless separately licensed"
+  },
+  "security": {
+    "no_execution_authority": true,
+    "no_partner_secret_in_public_artifacts": true,
+    "receiver_controls_admission_policy": true,
+    "receiver_controls_key_pin_and_revocation_policy": true
+  }
+}
