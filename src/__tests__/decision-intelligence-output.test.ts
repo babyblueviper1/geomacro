@@ -62,4 +62,34 @@ describe("Geomacro decision intelligence output", () => {
     expect(result.decision.guardrail).toContain("Do not charge or act");
     expect(result.raw_data_delivered).toBe(false);
   });
+
+  it("maps low risk to proceed and high risk to review", () => {
+    const low = buildDecisionIntelligence({
+      subject: { type: "country", country_iso3: "SGP" },
+      state_version: "gstate_low",
+      risk: { score: 18, label: "LOW", delta: -1.2, direction: "cooling" },
+      confidence: 0.94,
+      observed_at: "2026-09-28T05:20:00.000Z",
+      attribution: [{ driver: "lower event pressure", delta_contribution: -1.2 }],
+      structural: { available_dimensions: ["macro_monetary"], latest_observed_at: "2026-09-28T05:20:00.000Z" },
+      live: { current_event_signal: false, event_count: 0, checked_at: "2026-09-28T05:25:00.000Z" },
+      risk_gate_decision: null,
+      as_of: "2026-09-28T05:30:00.000Z",
+    });
+    const high = buildDecisionIntelligence({
+      subject: { type: "country", country_iso3: "TST" },
+      state_version: "gstate_high",
+      risk: { score: 78, label: "HIGH", delta: 9.4, direction: "escalating" },
+      confidence: 0.88,
+      observed_at: "2026-09-28T05:20:00.000Z",
+      attribution: [{ driver: "geopolitical escalation", delta_contribution: 9.4 }],
+      structural: { available_dimensions: ["geopolitical_security"], latest_observed_at: "2026-09-28T05:20:00.000Z" },
+      live: { current_event_signal: true, event_count: 3, checked_at: "2026-09-28T05:25:00.000Z" },
+      risk_gate_decision: null,
+      as_of: "2026-09-28T05:30:00.000Z",
+    });
+
+    expect(low.decision.action).toBe("PROCEED");
+    expect(high.decision.action).toBe("REVIEW");
+  });
 });
