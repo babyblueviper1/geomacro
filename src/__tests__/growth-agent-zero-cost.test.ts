@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const growth = JSON.parse(readFileSync("config/growth-agent.json", "utf8"));
+const worker = readFileSync("scripts/marketing/run-growth-agent.mjs", "utf8");
+const workflow = readFileSync(".github/workflows/growth-agent-shadow.yml", "utf8");
 
 describe("Geomacro zero-cost Growth Agent", () => {
   it("keeps external publishing and submissions fail-closed by default", () => {
@@ -11,6 +13,8 @@ describe("Geomacro zero-cost Growth Agent", () => {
     expect(growth.activation.require_production_endpoint_health).toBe(true);
     expect(growth.activation.require_live_402_before_paid_marketplace_claims).toBe(true);
     expect(growth.activation.require_receipt_or_listing_evidence).toBe(true);
+    expect(worker).toContain("Live Growth Agent requires explicit owner authorization");
+    expect(worker).toContain("all live external actions remain disabled");
   });
 
   it("keeps the core acquisition loop zero-cost", () => {
@@ -20,6 +24,7 @@ describe("Geomacro zero-cost Growth Agent", () => {
     expect(growth.cost_guardrails.paid_directory_submission).toBe(false);
     expect(growth.cost_guardrails.paid_influencer_campaign).toBe(false);
     expect(growth.free_social_channels.x.enabled).toBe(false);
+    expect(worker).toContain("paid_distribution_enabled: false");
   });
 
   it("requires value-first distribution and forbids spam behavior", () => {
@@ -31,6 +36,16 @@ describe("Geomacro zero-cost Growth Agent", () => {
     expect(growth.anti_spam.captcha_bypass).toBe(false);
     expect(growth.anti_spam.terms_bypass).toBe(false);
     expect(growth.anti_spam.max_promotional_posts_per_channel_per_day).toBeLessThanOrEqual(2);
+  });
+
+  it("runs continuously in bounded six-hour shadow cycles and records evidence", () => {
+    expect(workflow).toContain('cron: "17 */6 * * *"');
+    expect(workflow).toContain("scripts/marketing/run-growth-agent.mjs");
+    expect(workflow).toContain("geomacro-growth-agent-run");
+    expect(workflow).toContain("GEOMACRO_GROWTH_AGENT_ACK");
+    expect(worker).toContain("listing_queue");
+    expect(worker).toContain("social_distribution");
+    expect(worker).toContain("next_manual_dependencies");
   });
 
   it("optimizes for repeat paid usage rather than vanity impressions", () => {
