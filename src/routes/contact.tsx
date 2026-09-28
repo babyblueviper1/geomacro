@@ -1,14 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Briefcase, ExternalLink, Github, Mail, Network, ShieldCheck } from "lucide-react";
+import { Briefcase, ExternalLink, Github, LifeBuoy, Mail, Network, ShieldCheck } from "lucide-react";
 
-const TITLE = "Contact Geomacro · Private Pilots, Integrations & Partnerships";
+const TITLE = "Contact Geomacro · Sales, Support, Integrations & Partnerships";
 const DESCRIPTION =
-  "Talk with Geomacro about a focused Private Pilot, institutional risk workflow, API integration or strategic partnership.";
+  "Contact Geomacro for commercial access, customer support, institutional risk workflows, API integrations and strategic partnerships.";
 const URL = "https://geomacro.live/contact";
 const X_URL = "https://x.com/GeomacroLive";
 const GITHUB_URL = "https://github.com/blocknine0/geomacro";
 const EMAIL = "contact@geomacro.live";
-const PILOT_EMAIL = `mailto:${EMAIL}?subject=${encodeURIComponent("Geomacro Private Pilot discussion")}`;
+const COMMERCIAL_EMAIL = `mailto:${EMAIL}?subject=${encodeURIComponent("Geomacro commercial access")}`;
+const SUPPORT_EMAIL = `mailto:${EMAIL}?subject=${encodeURIComponent("Geomacro customer support")}`;
 const INTEGRATION_EMAIL = `mailto:${EMAIL}?subject=${encodeURIComponent("Geomacro API / integration discussion")}`;
 const PARTNERSHIP_EMAIL = `mailto:${EMAIL}?subject=${encodeURIComponent("Geomacro strategic partnership discussion")}`;
 
@@ -50,55 +51,62 @@ export const Route = createFileRoute("/contact")({
 const contactPaths = [
   {
     icon: Briefcase,
-    title: "Private Pilot or institutional evaluation",
-    text: "Bring one real country, corridor, treasury, risk or supply-chain workflow. The pilot should be narrow enough to measure decision usefulness, data fit and operational friction.",
-    cta: "Discuss a Private Pilot",
-    href: PILOT_EMAIL,
+    title: "Commercial access",
+    text: "For institutions, operators or teams evaluating Geomacro Intelligence, Critical Minerals & Rare Earth Risk, Risk Indices, Ask Geomacro or governed machine delivery.",
+    cta: "Discuss commercial access",
+    href: COMMERCIAL_EMAIL,
+  },
+  {
+    icon: LifeBuoy,
+    title: "Customer support",
+    text: "For product questions, access problems, unexpected output, website issues or anything the Geomacro Customer Care assistant could not resolve.",
+    cta: "Contact customer support",
+    href: SUPPORT_EMAIL,
   },
   {
     icon: Network,
     title: "API, agent or workflow integration",
-    text: "Discuss governed data delivery, signed Risk Objects, Risk Gate or machine-readable integration for an existing product or internal workflow.",
+    text: "Discuss governed data delivery, Risk Objects, Risk Gate or machine-readable integration for software, internal systems or AI-agent workflows.",
     cta: "Discuss an integration",
     href: INTEGRATION_EMAIL,
   },
   {
     icon: ShieldCheck,
     title: "Strategic or ecosystem partnership",
-    text: "For distribution, data, infrastructure, accelerator, grant or strategic collaboration where Geomacro's risk-intelligence layer may fit a broader platform.",
+    text: "For distribution, data, infrastructure, accelerator, grant or strategic collaboration around Geomacro's risk-intelligence layer.",
     cta: "Discuss a partnership",
     href: PARTNERSHIP_EMAIL,
   },
 ] as const;
 
-const PILOT_DETAILS = [
+const COMMERCIAL_DETAILS = [
   "Your organization or team and the workflow owner.",
-  "The country, directional corridor or risk problem you want to evaluate.",
-  "The decision point Geomacro would support, such as review, limit change, escalation or monitoring.",
-  "What you use today and what is missing from that process.",
-  "The interface you need: analyst review, structured export, API, Risk Object or Risk Gate.",
-  "How you would judge a useful pilot and the intended evaluation window.",
+  "The geopolitical, macroeconomic, country, corridor or critical-minerals problem you want to evaluate.",
+  "The decision point Geomacro should support: monitoring, review, approval, escalation, limit setting or another workflow.",
+  "Whether you need human-facing intelligence, structured export, API, Risk Object or Risk Gate delivery.",
+  "Expected usage, latency or integration requirements for machine access.",
+  "What a successful commercial evaluation should demonstrate for your team.",
 ] as const;
 
 function ContactPage() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
       <section className="max-w-3xl">
-        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-primary">Contact</p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">Bring a real risk workflow.</h1>
+        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-primary">Sales & Support</p>
+        <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">Talk to Geomacro.</h1>
         <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
-          The most useful conversation starts with a concrete decision or monitoring problem. Geomacro is currently focused on narrow Private Pilots, integration discussions and strategic partnerships rather than broad self-serve enterprise onboarding.
+          Use the Customer Care button for common product questions. For commercial access, customer support, integrations or partnerships, contact the Geomacro team directly.
         </p>
         <a href={`mailto:${EMAIL}`} className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline">
           <Mail className="h-4 w-4" /> {EMAIL}
         </a>
       </section>
 
-      <section className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-3">
+      <section className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-2">
         {contactPaths.map((section) => {
           const Icon = section.icon;
           return (
-            <article key={section.title} className="flex min-h-[260px] flex-col rounded-2xl border border-border/70 bg-card/40 p-6 transition hover:border-primary/30">
+            <article key={section.title} className="flex min-h-[230px] flex-col rounded-2xl border border-border/70 bg-card/40 p-6 transition hover:border-primary/30">
               <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <Icon className="h-4 w-4 text-primary" /> {section.title}
               </div>
@@ -116,10 +124,10 @@ function ContactPage() {
 
       <section className="mt-10 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <article className="rounded-2xl border border-border/70 bg-card/40 p-6 sm:p-8">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-primary">For a useful first conversation</p>
-          <h2 className="mt-3 text-2xl font-semibold">Include the workflow, not just the industry.</h2>
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-primary">For a useful commercial conversation</p>
+          <h2 className="mt-3 text-2xl font-semibold">Send the workflow, not just the industry.</h2>
           <ul className="mt-5 space-y-3 text-sm leading-relaxed text-muted-foreground">
-            {PILOT_DETAILS.map((item) => (
+            {COMMERCIAL_DETAILS.map((item) => (
               <li key={item} className="flex gap-3">
                 <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
                 <span>{item}</span>
@@ -127,24 +135,24 @@ function ContactPage() {
             ))}
           </ul>
           <p className="mt-5 text-xs leading-relaxed text-muted-foreground">
-            Do not email seed phrases, private keys, production secrets or unnecessary personal/confidential data. Sensitive pilot data handling should be agreed before it is introduced.
+            Do not email seed phrases, private keys, production secrets or unnecessary personal/confidential data. Sensitive data handling should be agreed before it is introduced.
           </p>
         </article>
 
         <article className="rounded-2xl border border-border/70 bg-card/40 p-6 sm:p-8">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-primary">Evaluation path</p>
-          <h2 className="mt-3 text-2xl font-semibold">Scope first. Claims second.</h2>
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-primary">Commercial path</p>
+          <h2 className="mt-3 text-2xl font-semibold">Scope first. Delivery second.</h2>
           <ol className="mt-5 space-y-4 text-sm leading-relaxed text-muted-foreground">
-            <li><span className="font-mono text-primary">01</span> Confirm the workflow and whether current Geomacro coverage can support it.</li>
-            <li><span className="font-mono text-primary">02</span> Define the subject scope, evidence/data eligibility, interface and evaluation criteria.</li>
-            <li><span className="font-mono text-primary">03</span> Agree any commercial, support, security and data-handling boundaries before a Private Pilot begins.</li>
+            <li><span className="font-mono text-primary">01</span> Confirm the workflow and current Geomacro coverage.</li>
+            <li><span className="font-mono text-primary">02</span> Define the subject scope, evidence eligibility, delivery interface and success criteria.</li>
+            <li><span className="font-mono text-primary">03</span> Agree commercial, support, security and data-handling terms for the required service level.</li>
           </ol>
         </article>
       </section>
 
       <section className="mt-10 flex flex-col justify-between gap-5 rounded-2xl border border-border/70 bg-card/30 p-5 sm:flex-row sm:items-center">
         <div className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
-          <span className="font-medium text-foreground">Current stage:</span> Geomacro is founder-led, early-stage and focused on evidence-backed Private Pilots. A conversation or access request becomes a commercial relationship only when it is separately agreed.
+          <span className="font-medium text-foreground">Commercial boundary:</span> Geomacro sells risk intelligence and governed machine-delivery capabilities. Prediction Markets, Bridge and Swap remain separate testnet technical proofs and are not part of the commercial mainnet product.
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border border-border/70 px-3 py-2 text-sm hover:border-primary/40">
