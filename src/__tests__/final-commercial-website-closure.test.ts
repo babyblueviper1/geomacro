@@ -21,21 +21,7 @@ const PRIMARY_ROUTES = [
   "src/routes/contact.tsx",
 ] as const;
 
-const COMMERCIAL_NO_WALLET_ROUTES = [
-  "src/routes/index.tsx",
-  "src/routes/intelligence.tsx",
-  "src/routes/global-risk.tsx",
-  "src/routes/ask-geomacro.tsx",
-  "src/routes/institutional.tsx",
-  "src/routes/risk-gate.tsx",
-  "src/routes/data-api.tsx",
-  "src/routes/ecosystem.tsx",
-  "src/routes/research.tsx",
-  "src/routes/docs.tsx",
-  "src/routes/about.tsx",
-  "src/routes/roadmap.tsx",
-  "src/routes/contact.tsx",
-] as const;
+const COMMERCIAL_NO_WALLET_ROUTES = PRIMARY_ROUTES;
 
 function textFilesBelow(relativeDir: string): string[] {
   const root = join(ROOT, relativeDir);
@@ -60,12 +46,11 @@ describe("final commercial website closure", () => {
 
     expect(route).toContain("Global Risk Intelligence Infrastructure | Geomacro");
     expect(home).toContain("Turn world events into");
-    expect(home).toContain("Why adopt Geomacro");
+    expect(home).toContain("Available at launch");
+    expect(home).toContain("What users get");
+    expect(home).toContain("Roadmap, not launch promise");
     expect(home).toContain("Who it is for");
-    expect(home).toContain("Product status");
-    expect(home).toContain("Ecosystem & partnership");
-    expect(home).toContain("Circle Alliance Program");
-    expect(home).toContain("Work with Geomacro");
+    expect(home).toContain("Commercial access");
     expect(home).not.toContain("useIntelligence(");
     expect(home).not.toContain("useRiskIndices(");
     expect(home).not.toContain("114 / 194");
@@ -116,7 +101,6 @@ describe("final commercial website closure", () => {
 
     expect(ecosystem).toContain("https://partners.circle.com/partner/geomacro");
     expect(ecosystem).toContain("does not mean Circle endorses Geomacro");
-    expect(home).toContain("It is ecosystem participation, not an endorsement");
     expect(ecosystem).not.toMatch(/Official Circle Partner/i);
     expect(home).not.toMatch(/Official Circle Partner/i);
   });
