@@ -1,11 +1,11 @@
 {
   "schema_version": "geomacro.website-lock.v1",
   "locked": true,
-  "baseline_sha": "3017225436ad3e39538d7e530bdfa157cd1178d3",
-  "published_baseline": "Founder-approved Geomacro website with complete 15-language navigation, Arc Mainnet Risk Proof generation and verification, plus human-readable decoded onchain proof data",
+  "baseline_sha": "31d7f22c501675f0496fd925072dfd9e9a0bd5ef",
+  "published_baseline": "Founder-approved Geomacro website plus machine-readable partner verification discovery for external verifier and commercial integration readiness",
   "protect_lock_infrastructure": true,
   "policy": "Public website presentation is frozen. Intentional website changes require explicit founder approval and a dedicated baseline update.",
-  "locked_at_utc": "2026-09-27T09:12:00Z",
-  "published_source_sha": "3017225436ad3e39538d7e530bdfa157cd1178d3",
-  "lock_revision": "founder-approved-arc-proof-decode-main-20260927"
+  "locked_at_utc": "2026-09-28T15:16:00Z",
+  "published_source_sha": "31d7f22c501675f0496fd925072dfd9e9a0bd5ef",
+  "lock_revision": "founder-approved-partner-verification-discovery-20260928"
 }
