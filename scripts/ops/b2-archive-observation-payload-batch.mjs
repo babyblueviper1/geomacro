@@ -19,6 +19,19 @@ const b2 = createB2Client({ endpointUrl: process.env.B2_S3_ENDPOINT,
   accessKey: process.env.B2_KEY_ID, secretKey: process.env.B2_APPLICATION_KEY,
   bucket: "geomacro-private-archive" });
 
+async function archiveRead(id, part) {
+  const response = await fetch(`${url}/functions/v1/archive-verify-read`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${role}`, "content-type": "application/json" },
+    body: JSON.stringify({ kind: "observation", id, part }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) throw new Error(`OBS_ARCHIVE_VERIFY_READ_FAILED_${response.status}`);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (bytes.length > 4_000_000) throw new Error("OBS_ARCHIVE_VERIFY_READ_TOO_LARGE");
+  return bytes;
+}
+
 const { data: rows, error } = await db.rpc("geomacro_next_observation_archive_candidates", {
   p_suffix: suffix,
   p_limit: limit,
@@ -38,7 +51,7 @@ for (const row of rows ?? []) {
   const archiveKey = `geomacro-evidence/v1/observations/${idHash}.json.gz`;
   const proofKey = `geomacro-evidence/v1/index/observations/${idHash}.json`;
   await b2.put(archiveKey, compressed);
-  const readback = await b2.get(archiveKey);
+  const readback = await archiveRead(row.observation_id, "archive");
   if (sha(readback) !== sha(compressed) || sha(gunzipSync(readback)) !== sha(raw)) {
     throw new Error("OBS_ARCHIVE_READBACK_INVALID");
   }
@@ -52,7 +65,7 @@ for (const row of rows ?? []) {
   };
   const proofBytes = Buffer.from(JSON.stringify(proof));
   await b2.put(proofKey, proofBytes);
-  if (sha(await b2.get(proofKey)) !== sha(proofBytes)) throw new Error("OBS_ARCHIVE_PROOF_INVALID");
+  if (sha(await archiveRead(row.observation_id, "proof")) !== sha(proofBytes)) throw new Error("OBS_ARCHIVE_PROOF_INVALID");
   const { data: current, error: checkError } = await db.from("live_external_observations")
     .select("raw_payload,raw_hash").eq("observation_id", row.observation_id).single();
   if (checkError || current?.raw_hash !== row.raw_hash ||
@@ -68,9 +81,10 @@ for (const row of rows ?? []) {
     throw new Error("OBS_ARCHIVE_UPDATE_UNCONFIRMED");
   }
   try {
-    const restored = JSON.parse(gunzipSync(await b2.get(archiveKey)).toString("utf8"));
+    const restored = JSON.parse(gunzipSync(await archiveRead(row.observation_id, "archive")).toString("utf8"));
+    const restoredProof = JSON.parse((await archiveRead(row.observation_id, "proof")).toString("utf8"));
     if (sha(Buffer.from(JSON.stringify(restored))) !== proof.payload_sha256 ||
-        JSON.parse((await b2.get(proofKey)).toString("utf8")).compressed_sha256 !== proof.compressed_sha256) {
+        restoredProof.compressed_sha256 !== proof.compressed_sha256) {
       throw new Error("OBS_ARCHIVE_POST_UPDATE_RESTORE_FAILED");
     }
   } catch (cause) {
