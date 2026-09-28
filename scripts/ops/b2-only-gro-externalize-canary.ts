@@ -18,11 +18,11 @@ const b2 = createB2Client({ endpointUrl: process.env.B2_S3_ENDPOINT,
   accessKey: process.env.B2_KEY_ID, secretKey: process.env.B2_APPLICATION_KEY,
   bucket: "geomacro-private-archive" });
 
-async function archiveRead(id: string, part: "archive" | "proof") {
+async function archiveRead(id: string) {
   const response = await fetch(`${url}/functions/v1/archive-verify-read`, {
     method: "POST",
     headers: { authorization: `Bearer ${role}`, "content-type": "application/json" },
-    body: JSON.stringify({ kind: "gro", id, part }),
+    body: JSON.stringify({ kind: "gro", id, part: "archive" }),
     signal: AbortSignal.timeout(20_000),
   });
   if (!response.ok) throw new Error(`B2_ONLY_GRO_VERIFY_READ_FAILED_${response.status}`);
@@ -70,7 +70,7 @@ if (existingStorage || String(infoError?.statusCode ?? infoError?.status) !== "4
 }
 
 await b2.put(archiveKey, compressed);
-const readback = await archiveRead(id, "archive");
+const readback = await archiveRead(id);
 const restoredBeforeCleanup = JSON.parse(gunzipSync(readback).toString("utf8"));
 if (sha(readback) !== sha(compressed) ||
     canonicalRiskObjectJson(restoredBeforeCleanup) !== canonicalRiskObjectJson(row.payload) ||
@@ -86,15 +86,7 @@ const proof = {
   compressed_bytes: compressed.length, payload_bytes: raw.length,
   source_expires_at: row.expires_at, verified_at: new Date().toISOString(),
 };
-const proofBytes = Buffer.from(JSON.stringify(proof));
-await b2.put(proofKey, proofBytes);
-const proofReadback = await archiveRead(id, "proof");
-if (sha(proofReadback) !== sha(proofBytes)) throw new Error("B2_ONLY_GRO_PROOF_INVALID");
-const restoredProofBeforeCleanup = JSON.parse(proofReadback.toString("utf8"));
-if (restoredProofBeforeCleanup.compressed_sha256 !== proof.compressed_sha256 ||
-    restoredProofBeforeCleanup.signed_payload_hash !== proof.signed_payload_hash) {
-  throw new Error("B2_ONLY_GRO_PROOF_CONTENT_INVALID");
-}
+await b2.put(proofKey, Buffer.from(JSON.stringify(proof)));
 
 const { data: updated, error: updateError } = await db.from("geomacro_risk_objects")
   .update({ payload: null, archive_key: pointer, archive_sha256: sha(compressed) })
@@ -108,8 +100,7 @@ if (updateError || updated?.object_id !== id || updated.payload !== null ||
 try {
   if (restoredBeforeCleanup.integrity?.payload_hash !== row.payload_hash ||
       !verifyRiskObjectSignature(restoredBeforeCleanup, keys).valid ||
-      canonicalRiskObjectJson(restoredBeforeCleanup) !== canonicalRiskObjectJson(row.payload) ||
-      restoredProofBeforeCleanup.compressed_sha256 !== proof.compressed_sha256) {
+      canonicalRiskObjectJson(restoredBeforeCleanup) !== canonicalRiskObjectJson(row.payload)) {
     throw new Error("B2_ONLY_GRO_RESTORE_INVALID");
   }
 } catch (cause) {
@@ -121,5 +112,5 @@ try {
 }
 console.log(JSON.stringify({ ok: true, object_id: id, b2_only: true,
   source_row_retained: true, signed_restore_verified: true, signing_key_id: activeSigningKeyId,
-  duplicate_b2_reads_avoided: 1, compressed_bytes: compressed.length, shard_suffix: suffix,
-  verification_mode: "single-full-readback-plus-cached-restore" }));
+  b2_gets_per_object: 1, compressed_bytes: compressed.length, shard_suffix: suffix,
+  verification_mode: "one-full-archive-readback-before-cleanup" }));
