@@ -1,3 +1,4 @@
+// Launch-scope closure contract: keep current products separate from roadmap and testnet proof.
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
