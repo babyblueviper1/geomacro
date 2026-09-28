@@ -18,6 +18,20 @@ const db = createClient(url, role, { auth: { persistSession: false, autoRefreshT
 const b2 = createB2Client({ endpointUrl: process.env.B2_S3_ENDPOINT,
   accessKey: process.env.B2_KEY_ID, secretKey: process.env.B2_APPLICATION_KEY,
   bucket: "geomacro-private-archive" });
+
+async function archiveRead(id: string, part: "archive" | "proof") {
+  const response = await fetch(`${url}/functions/v1/archive-verify-read`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${role}`, "content-type": "application/json" },
+    body: JSON.stringify({ kind: "gro", id, part }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) throw new Error(`B2_ONLY_GRO_VERIFY_READ_FAILED_${response.status}`);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (bytes.length > 4_000_000) throw new Error("B2_ONLY_GRO_VERIFY_READ_TOO_LARGE");
+  return bytes;
+}
+
 const keyResponse = await fetch("https://geomacro.live/api/risk-object-keys", { signal: AbortSignal.timeout(15_000) });
 if (!keyResponse.ok) throw new Error("B2_ONLY_GRO_KEYS_UNAVAILABLE");
 const keyBody = await keyResponse.json() as { keys?: Array<{ key_id: string; public_key_spki_b64: string; status: "active" | "retired" | "revoked"; not_before?: string | null; not_after?: string | null }> };
@@ -56,7 +70,7 @@ if (existingStorage || String(infoError?.statusCode ?? infoError?.status) !== "4
   throw new Error("B2_ONLY_GRO_STORAGE_NOT_CONFIRMED_ABSENT");
 }
 await b2.put(archiveKey, compressed);
-const readback = await b2.get(archiveKey);
+const readback = await archiveRead(id, "archive");
 if (sha(readback) !== sha(compressed) ||
     canonicalRiskObjectJson(JSON.parse(gunzipSync(readback).toString("utf8"))) !== canonicalRiskObjectJson(row.payload)) {
   throw new Error("B2_ONLY_GRO_READBACK_INVALID");
@@ -71,7 +85,7 @@ const proof = {
 };
 const proofBytes = Buffer.from(JSON.stringify(proof));
 await b2.put(proofKey, proofBytes);
-if (sha(await b2.get(proofKey)) !== sha(proofBytes)) throw new Error("B2_ONLY_GRO_PROOF_INVALID");
+if (sha(await archiveRead(id, "proof")) !== sha(proofBytes)) throw new Error("B2_ONLY_GRO_PROOF_INVALID");
 const { data: updated, error: updateError } = await db.from("geomacro_risk_objects")
   .update({ payload: null, archive_key: pointer, archive_sha256: sha(compressed) })
   .eq("object_id", id).is("archive_key", null).not("payload", "is", null)
