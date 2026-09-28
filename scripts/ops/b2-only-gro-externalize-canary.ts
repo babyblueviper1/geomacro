@@ -2,7 +2,6 @@
 // One signed, expired GRO: B2-only bytes, immutable DB pointer, and live restore.
 import { createHash } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
-import { setTimeout as sleep } from "node:timers/promises";
 import { createClient } from "@supabase/supabase-js";
 import { createB2Client } from "./b2-s3-client.mjs";
 import { canonicalRiskObjectJson, verifyRiskObjectSignature, type RiskObjectVerificationKeys } from "../../src/lib/risk-object-signing.server";
@@ -14,7 +13,7 @@ const role = process.env.APP_SUPABASE_SERVICE_ROLE_KEY;
 const activeSigningKeyId = String(process.env.RISK_OBJECT_SIGNING_KEY_ID ?? "").trim();
 const suffix = String(process.env.GRO_ARCHIVE_SUFFIX ?? "").trim().toLowerCase();
 if (url !== "https://ldpwajisioljyjtojvfx.supabase.co" || !role || !activeSigningKeyId ||
-    (suffix && !/^[0-9a-f]$/.test(suffix))) throw new Error("B2_ONLY_GRO_CONFIG_INVALID");
+    !/^[0-9a-f]$/.test(suffix)) throw new Error("B2_ONLY_GRO_CONFIG_INVALID");
 const db = createClient(url, role, { auth: { persistSession: false, autoRefreshToken: false } });
 const b2 = createB2Client({ endpointUrl: process.env.B2_S3_ENDPOINT,
   accessKey: process.env.B2_KEY_ID, secretKey: process.env.B2_APPLICATION_KEY,
@@ -25,36 +24,20 @@ const keyBody = await keyResponse.json() as { keys?: Array<{ key_id: string; pub
 const keys: RiskObjectVerificationKeys = Object.fromEntries((keyBody.keys ?? [])
   .map(({ key_id, ...record }) => [key_id, record]));
 if (!keys[activeSigningKeyId]) throw new Error("B2_ONLY_GRO_ACTIVE_KEY_NOT_PUBLISHED");
-const cutoff = new Date(Date.now() - 6 * 3_600_000).toISOString();
 
-async function selectRows() {
-  for (let attempt = 1; attempt <= 4; attempt++) {
-    let query = db.from("geomacro_risk_objects")
-      .select("object_id,payload,payload_hash,signature,signing_key_id,expires_at,archive_key")
-      .is("archive_key", null).not("payload", "is", null)
-      .eq("signing_key_id", activeSigningKeyId).not("signature", "is", null)
-      .lt("expires_at", cutoff);
-    if (suffix) query = query.like("object_id", `%${suffix}`);
-    const result = await query.order("generated_at", { ascending: true }).limit(100);
-    if (!result.error) return result.data ?? [];
-    const transient = result.error.code === "57014" || /statement timeout/i.test(result.error.message ?? "");
-    if (!transient || attempt === 4) throw result.error;
-    const delayMs = 1500 * (2 ** (attempt - 1));
-    console.warn(JSON.stringify({ warning: "GRO_ARCHIVE_SELECT_RETRY", attempt, delay_ms: delayMs,
-      code: result.error.code ?? null, shard_suffix: suffix || null }));
-    await sleep(delayMs);
-  }
-  return [];
-}
-
-const rows = await selectRows();
-if (!rows.length) {
+const { data: rows, error } = await db.rpc("geomacro_next_gro_archive_candidates", {
+  p_suffix: suffix,
+  p_signing_key_id: activeSigningKeyId,
+  p_limit: 100,
+});
+if (error) throw error;
+if (!rows?.length) {
   console.log(JSON.stringify({ ok: true, status: "complete", processed: 0,
-    signing_key_id: activeSigningKeyId, shard_suffix: suffix || null }));
+    signing_key_id: activeSigningKeyId, shard_suffix: suffix }));
   process.exit(0);
 }
 const row = rows.find(candidate => /^gro_[A-Za-z0-9_]+$/.test(candidate.object_id) &&
-  (!suffix || candidate.object_id.toLowerCase().endsWith(suffix)) &&
+  candidate.object_id.toLowerCase().endsWith(suffix) &&
   candidate.payload?.object_id === candidate.object_id &&
   candidate.payload?.integrity?.payload_hash === candidate.payload_hash &&
   candidate.payload?.integrity?.signing_key_id === candidate.signing_key_id &&
@@ -112,4 +95,4 @@ try {
 }
 console.log(JSON.stringify({ ok: true, object_id: id, b2_only: true,
   source_row_retained: true, signed_restore_verified: true, signing_key_id: activeSigningKeyId,
-  compressed_bytes: compressed.length, shard_suffix: suffix || null }));
+  compressed_bytes: compressed.length, shard_suffix: suffix }));
