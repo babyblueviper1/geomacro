@@ -1,11 +1,6 @@
 name: Public source runtime certification
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "global-intelligence/**"
-      - ".github/workflows/public-source-runtime.yml"
   workflow_dispatch:
 
 permissions:
