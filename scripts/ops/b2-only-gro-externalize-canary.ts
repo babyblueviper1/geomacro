@@ -7,6 +7,9 @@ import { createB2Client } from "./b2-s3-client.mjs";
 import { canonicalRiskObjectJson, verifyRiskObjectSignature, type RiskObjectVerificationKeys } from "../../src/lib/risk-object-signing.server";
 
 const sha = (value: Buffer) => createHash("sha256").update(value).digest("hex");
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const TRANSIENT_READ_STATUSES = new Set([429, 500, 502, 503, 504]);
+const READ_ATTEMPTS = 4;
 const url = process.env.APP_SUPABASE_URL;
 const role = process.env.APP_SUPABASE_SERVICE_ROLE_KEY;
 const activeSigningKeyId = String(process.env.RISK_OBJECT_SIGNING_KEY_ID ?? "").trim();
@@ -19,16 +22,31 @@ const b2 = createB2Client({ endpointUrl: process.env.B2_S3_ENDPOINT,
   bucket: "geomacro-private-archive" });
 
 async function archiveRead(id: string) {
-  const response = await fetch(`${url}/functions/v1/archive-verify-read`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${role}`, "content-type": "application/json" },
-    body: JSON.stringify({ kind: "gro", id, part: "archive" }),
-    signal: AbortSignal.timeout(20_000),
-  });
-  if (!response.ok) throw new Error(`B2_ONLY_GRO_VERIFY_READ_FAILED_${response.status}`);
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length > 4_000_000) throw new Error("B2_ONLY_GRO_VERIFY_READ_TOO_LARGE");
-  return bytes;
+  for (let attempt = 1; attempt <= READ_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(`${url}/functions/v1/archive-verify-read`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${role}`, "content-type": "application/json" },
+        body: JSON.stringify({ kind: "gro", id, part: "archive" }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (response.ok) {
+        const bytes = Buffer.from(await response.arrayBuffer());
+        if (bytes.length > 4_000_000) throw new Error("B2_ONLY_GRO_VERIFY_READ_TOO_LARGE");
+        return bytes;
+      }
+      if (!TRANSIENT_READ_STATUSES.has(response.status) || attempt === READ_ATTEMPTS) {
+        throw new Error(`B2_ONLY_GRO_VERIFY_READ_FAILED_${response.status}`);
+      }
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      if (message === "B2_ONLY_GRO_VERIFY_READ_TOO_LARGE" || /^B2_ONLY_GRO_VERIFY_READ_FAILED_\d+$/.test(message) || attempt === READ_ATTEMPTS) {
+        throw cause;
+      }
+    }
+    await sleep(500 * 2 ** (attempt - 1));
+  }
+  throw new Error("B2_ONLY_GRO_VERIFY_READ_RETRY_EXHAUSTED");
 }
 
 const keyResponse = await fetch("https://geomacro.live/api/risk-object-keys", { signal: AbortSignal.timeout(15_000) });

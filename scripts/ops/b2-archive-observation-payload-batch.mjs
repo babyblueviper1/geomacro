@@ -7,6 +7,9 @@ import { createClient } from "@supabase/supabase-js";
 import { createB2Client } from "./b2-s3-client.mjs";
 
 const sha = (value) => createHash("sha256").update(value).digest("hex");
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const TRANSIENT_READ_STATUSES = new Set([429, 500, 502, 503, 504]);
+const READ_ATTEMPTS = 4;
 const url = process.env.APP_SUPABASE_URL;
 const role = process.env.APP_SUPABASE_SERVICE_ROLE_KEY;
 const limit = Number(process.env.OBS_ARCHIVE_LIMIT ?? 1);
@@ -34,23 +37,36 @@ const b2 = createB2Client({
 });
 
 async function archiveRead(id) {
-  const response = await fetch(`${url}/functions/v1/archive-verify-read`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${role}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ kind: "observation", id, part: "archive" }),
-    signal: AbortSignal.timeout(20_000),
-  });
-  if (!response.ok) {
-    throw new Error(`OBS_ARCHIVE_VERIFY_READ_FAILED_${response.status}`);
+  for (let attempt = 1; attempt <= READ_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(`${url}/functions/v1/archive-verify-read`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${role}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ kind: "observation", id, part: "archive" }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (response.ok) {
+        const bytes = Buffer.from(await response.arrayBuffer());
+        if (bytes.length > 4_000_000) {
+          throw new Error("OBS_ARCHIVE_VERIFY_READ_TOO_LARGE");
+        }
+        return bytes;
+      }
+      if (!TRANSIENT_READ_STATUSES.has(response.status) || attempt === READ_ATTEMPTS) {
+        throw new Error(`OBS_ARCHIVE_VERIFY_READ_FAILED_${response.status}`);
+      }
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      if (message === "OBS_ARCHIVE_VERIFY_READ_TOO_LARGE" || /^OBS_ARCHIVE_VERIFY_READ_FAILED_\d+$/.test(message) || attempt === READ_ATTEMPTS) {
+        throw cause;
+      }
+    }
+    await sleep(500 * 2 ** (attempt - 1));
   }
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length > 4_000_000) {
-    throw new Error("OBS_ARCHIVE_VERIFY_READ_TOO_LARGE");
-  }
-  return bytes;
+  throw new Error("OBS_ARCHIVE_VERIFY_READ_RETRY_EXHAUSTED");
 }
 
 const { data: rows, error } = await db.rpc(
@@ -80,8 +96,8 @@ for (const row of rows ?? []) {
 
   await b2.put(archiveKey, compressed);
 
-  // This is the only B2 GET needed for this object. It happens before any
-  // Supabase cleanup and verifies both the compressed bytes and restored JSON.
+  // This is the only successful B2 GET needed for this object. Transient
+  // gateway failures may be retried, but cleanup only follows a full readback.
   const readback = await archiveRead(row.observation_id);
   const restored = JSON.parse(gunzipSync(readback).toString("utf8"));
   if (
