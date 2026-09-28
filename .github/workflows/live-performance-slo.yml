@@ -2,8 +2,8 @@ name: Live Performance SLO
 
 on:
   workflow_dispatch: {}
-  schedule:
-    - cron: '17 */3 * * *'
+  # Emergency Supabase quota hold. Real-network SLO measurement remains manually
+  # available while recurring route probes are paused to reduce log/egress growth.
 
 permissions:
   contents: read

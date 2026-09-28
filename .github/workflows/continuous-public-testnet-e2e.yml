@@ -2,8 +2,9 @@ name: Continuous Public + Testnet E2E Acceptance
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "*/15 * * * *"
+  # Emergency Supabase quota hold. Keep the full acceptance monitor manually
+  # runnable and push-triggered for relevant code changes, but stop the 15-minute
+  # production polling loop while database/log/egress usage is above target.
   push:
     branches:
       - main
@@ -123,13 +124,13 @@ jobs:
         run: |
           set -euo pipefail
           body="$(mktemp)"
-          code="$(curl -L --retry 4 --retry-all-errors --retry-delay 2 -sS -o "$body" -w '%{http_code}'             -H 'content-type: application/json'             --data '{"request_id":"continuous-unauth-001","capability":"gri_read","subject":{"type":"global"}}'             "$BASE_URL/api/testnet/intelligence")"
+          code="$(curl -L --retry 4 --retry-all-errors --retry-delay 2 -sS -o "$body" -w '%{http_code}' -H 'content-type: application/json' --data '{"request_id":"continuous-unauth-001","capability":"gri_read","subject":{"type":"global"}}' "$BASE_URL/api/testnet/intelligence")"
           test "$code" = "401"
           grep -Fq 'COMMERCIAL_API_KEY_REQUIRED' "$body"
           ! grep -Eqi 'display_score|raw_score|risk_object|payment_event_id|credits_remaining|gmk_test_|gms_test_' "$body"
 
           body2="$(mktemp)"
-          code2="$(curl -L --retry 4 --retry-all-errors --retry-delay 2 -sS -o "$body2" -w '%{http_code}'             -H 'content-type: application/json'             --data '{"subject":{"type":"corridor","origin_country_iso3":"USA","destination_country_iso3":"CHN"},"policy_preset":"cautious","action_type":"agent_payment","amount_usdc":10000}'             "$BASE_URL/api/agent/risk")"
+          code2="$(curl -L --retry 4 --retry-all-errors --retry-delay 2 -sS -o "$body2" -w '%{http_code}' -H 'content-type: application/json' --data '{"subject":{"type":"corridor","origin_country_iso3":"USA","destination_country_iso3":"CHN"},"policy_preset":"cautious","action_type":"agent_payment","amount_usdc":10000}' "$BASE_URL/api/agent/risk")"
           case "$code2" in
             401|402)
               ;;
@@ -152,7 +153,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          response="$(curl -L --retry 5 --retry-all-errors --retry-delay 2 -sS             -H 'content-type: application/json'             --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}'             "$ARC_RPC_URL")"
+          response="$(curl -L --retry 5 --retry-all-errors --retry-delay 2 -sS -H 'content-type: application/json' --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' "$ARC_RPC_URL")"
           test "$(echo "$response" | jq -r '.result')" = "0x4cef52"
           test $((16#4cef52)) = "$ARC_CHAIN_ID"
 
@@ -160,7 +161,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          body="$(curl -L --retry 5 --retry-all-errors --retry-delay 2 -sS             -H 'content-type: application/json'             --data '{"jsonrpc":"2.0","method":"eth_getCode","params":["0x2F874FB07084a22D2bB314D0762Af57Cb1856868","latest"],"id":1}'             "$ARC_RPC_URL")"
+          body="$(curl -L --retry 5 --retry-all-errors --retry-delay 2 -sS -H 'content-type: application/json' --data '{"jsonrpc":"2.0","method":"eth_getCode","params":["0x2F874FB07084a22D2bB314D0762Af57Cb1856868","latest"],"id":1}' "$ARC_RPC_URL")"
           code="$(echo "$body" | jq -r '.result')"
           test -n "$code"
           test "$code" != "0x"
