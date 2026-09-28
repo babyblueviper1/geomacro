@@ -50,12 +50,13 @@ describe("commercial public surface v2", () => {
     const home = read("src/components/home/commercial-home.tsx");
     const shell = read("src/components/site-shell.tsx");
 
-    expect(home).toContain("Global risk intelligence infrastructure");
+    expect(home).toContain("Global risk intelligence");
     expect(home).toContain("Turn world events into");
-    expect(home).toContain("Why adopt Geomacro");
+    expect(home).toContain("Available at launch");
+    expect(home).toContain("What users get");
+    expect(home).toContain("Roadmap, not launch promise");
     expect(home).toContain("Who it is for");
-    expect(home).toContain("Ecosystem & partnership");
-    expect(home).toContain("Discuss a partnership");
+    expect(home).toContain("Commercial access");
     expect(home).not.toContain("AskGeomacroSection");
     expect(home).not.toContain("RiskIndicesSection");
     expect(home).not.toContain("eventCount");
@@ -78,37 +79,39 @@ describe("commercial public surface v2", () => {
     expect(read("public/.well-known/security.txt")).toContain("contact@geomacro.live");
   });
 
-  it("keeps the Circle Alliance claim verifiable and explicitly non-endorsing", () => {
+  it("keeps the Circle Alliance claim verifiable and explicitly non-endorsing on the ecosystem surface", () => {
     const ecosystem = read("src/routes/ecosystem.tsx");
     const home = read("src/components/home/commercial-home.tsx");
 
-    for (const surface of [ecosystem, home]) {
-      expect(surface).toContain("https://partners.circle.com/partner/geomacro");
-      expect(surface).toContain("Circle Alliance");
-    }
+    expect(ecosystem).toContain("https://partners.circle.com/partner/geomacro");
+    expect(ecosystem).toContain("Circle Alliance");
     expect(ecosystem).toContain("does not mean Circle endorses Geomacro's risk methodology");
     expect(ecosystem).not.toContain("Official Circle Partner");
+    expect(home).not.toContain("Official Circle Partner");
   });
 
-  it("keeps runtime agent-commerce status truthful across pre-launch and production", () => {
+  it("keeps runtime agent-commerce status truthful without promoting it as a launch homepage product", () => {
     const status = read("src/components/agent-commerce-status.tsx");
     const home = read("src/components/home/commercial-home.tsx");
+    const dataApi = read("src/routes/data-api.tsx");
 
     expect(status).toContain('/api/x402/intelligence');
     expect(status).toContain('environment === "production"');
     expect(status).toContain("controlled pre-launch");
     expect(status).toContain("Testnet settlement is not commercial revenue");
-    expect(home).toContain("AgentCommerceStatus compact");
+    expect(dataApi).toContain("AgentCommerceStatus");
+    expect(home).toContain("Paid agent and x402 production access");
+    expect(home).not.toContain("AgentCommerceStatus compact");
   });
 
   it("qualifies commercial conversations before sensitive pilot work", () => {
     const contact = read("src/routes/contact.tsx");
 
-    expect(contact).toContain("Bring a real risk workflow");
-    expect(contact).toContain("The decision point Geomacro would support");
-    expect(contact).toContain("How you would judge a useful pilot");
+    expect(contact).toContain("Send the workflow, not just the industry");
+    expect(contact).toContain("The decision point Geomacro should support");
+    expect(contact).toContain("What a successful commercial evaluation should demonstrate for your team");
     expect(contact).toContain("Do not email seed phrases, private keys, production secrets");
-    expect(contact).toContain("Agree any commercial, support, security and data-handling boundaries");
+    expect(contact).toContain("Agree commercial, support, security and data-handling terms");
   });
 
   it("documents fail-soft public Risk Indices without synthetic fallback", () => {

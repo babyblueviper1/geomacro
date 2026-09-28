@@ -12,10 +12,9 @@ const V1_DECISIONS = [
   "PAUSE",
 ] as const;
 
-const CURRENT_V1_SURFACES = [
+const CURRENT_V1_MACHINE_SURFACES = [
   "README.md",
   "src/routes/risk-gate.tsx",
-  "src/routes/institutional.tsx",
   "src/content/docs/03-product-surfaces.md",
   "src/content/docs/26-agent-intelligence.md",
   "docs/RISK_GATE.md",
@@ -33,8 +32,8 @@ describe("Risk Gate v1 decision contract", () => {
     expect(contract).not.toContain('| "REROUTE"');
   });
 
-  it("keeps current v1 product surfaces aligned with the machine contract", () => {
-    for (const path of CURRENT_V1_SURFACES) {
+  it("keeps machine-facing v1 surfaces aligned while launch buyer pages stay product-boundary focused", () => {
+    for (const path of CURRENT_V1_MACHINE_SURFACES) {
       const content = read(path);
       for (const decision of V1_DECISIONS) {
         expect(content, `${path} must expose ${decision}`).toContain(decision);
@@ -54,7 +53,9 @@ describe("Risk Gate v1 decision contract", () => {
     expect(route).toContain("execution_authorized = false");
     expect(readme).not.toContain("PAUSE / REROUTE");
     expect(readme).toContain("`REROUTE` is reserved as a future/advisory alternative");
-    expect(institutional).not.toContain("PAUSE or REROUTE");
+    expect(institutional).toContain("Signed Risk Objects and Risk Gate");
+    expect(institutional).toContain("Machine and automation layers come later");
+    for (const decision of V1_DECISIONS) expect(institutional).not.toContain(decision);
     expect(surfaces).toContain("`REROUTE` is not a current v1 machine decision");
     expect(agentDocs).toContain("`REROUTE` is not a current Risk Gate v1 machine decision");
     expect(riskGateDocs).not.toContain("PAUSE / REROUTE");

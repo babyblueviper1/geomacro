@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportClientError } from "../lib/error-reporting";
 import { installClipboardCompatibility } from "../lib/clipboard-compat";
 import { SiteShell } from "../components/site-shell";
+import { CustomerCare } from "../components/customer-care";
 import { WalletProvider } from "../hooks/WalletProvider";
 
 const DEFAULT_TITLE = "Geopolitical, Macro & Critical Minerals Risk Intelligence | Geomacro";
@@ -177,10 +178,10 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <WalletProvider>
-        {/* Shared header + footer; nested routes render inside SiteShell. */}
         <SiteShell>
           <Outlet />
         </SiteShell>
+        <CustomerCare />
       </WalletProvider>
     </QueryClientProvider>
   );
