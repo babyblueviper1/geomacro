@@ -115,7 +115,12 @@ Deno.serve(async request => {
       if (packed.length > 2_000_000) continue;
       const pointer = `risk-object-archive/v1/${id}.json.gz`;
       const info = await fetch(`${url}/storage/v1/object/info/geomacro-live-intelligence/${pointer}`, { headers, signal: AbortSignal.timeout(10_000) });
-      if (info.status !== 404) throw Error(`STORAGE_ABSENCE_UNCONFIRMED_${info.status}`);
+      // Storage may use HTTP 400 with a structured 404 statusCode for missing objects.
+      const storageError = info.ok ? null : await info.json().catch(() => null) as { statusCode?: string | number; error?: string } | null;
+      const absent = info.status === 404 ||
+        (info.status === 400 && String(storageError?.statusCode) === "404" &&
+          /not.?found|no.?such.?key/i.test(String(storageError?.error ?? "")));
+      if (!absent) throw Error(`STORAGE_ABSENCE_UNCONFIRMED_${info.status}_${String(storageError?.statusCode ?? "UNKNOWN").replace(/[^A-Za-z0-9]/g, "").slice(0, 20)}`);
       const key = `geomacro-evidence/v1/gro/${id}.json.gz`;
       const proofKey = `geomacro-evidence/v1/index/gro/${id}.json`;
       await b2("PUT", key, access, secret, packed);
