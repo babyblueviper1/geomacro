@@ -1,11 +1,14 @@
-name: Signed GRO B2-only externalization bounded batch
+name: Signed GRO B2-only externalization automation
 
-# Safety mode: run the proven one-object canary five times serially. Each iteration verifies
-# signature, B2 readback, archive proof, DB pointer update and live restore; failures stop the batch.
 on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
   push:
     branches: [main]
-    paths: [.github/workflows/b2-only-gro-externalize-canary.yml, scripts/ops/b2-only-gro-externalize-canary.ts]
+    paths:
+      - .github/workflows/b2-only-gro-externalize-canary.yml
+      - scripts/ops/b2-only-gro-externalize-canary.ts
 
 permissions:
   contents: read
@@ -15,10 +18,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  externalize_five_verified:
+  externalize_verified_batch:
     if: ${{ github.repository == 'blocknine0/geomacro' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     environment: production
     env:
       APP_SUPABASE_URL: ${{ secrets.APP_SUPABASE_URL }}
@@ -36,11 +39,16 @@ jobs:
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile --ignore-scripts
-      - name: Externalize five signed expired GROs, one verified object at a time
+      - name: Externalize up to 25 expired signed GROs, one verified object at a time
         shell: bash
         run: |
           set -euo pipefail
-          for i in 1 2 3 4 5; do
-            echo "Verified GRO archive iteration ${i}/5"
-            bun scripts/ops/b2-only-gro-externalize-canary.ts
+          for i in $(seq 1 25); do
+            echo "Verified GRO archive iteration ${i}/25"
+            output="$(bun scripts/ops/b2-only-gro-externalize-canary.ts)"
+            echo "$output"
+            if echo "$output" | grep -q '"status":"complete"'; then
+              echo "No more eligible signed expired GRO payloads remain."
+              break
+            fi
           done
