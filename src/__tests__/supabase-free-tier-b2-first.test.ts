@@ -71,6 +71,17 @@ describe("Supabase free-tier B2-first storage contract", () => {
       .toBeLessThan(groWorker.indexOf(".update({ payload: null"));
   });
 
+  it("gates every sharded B2 fanout behind a single verified canary", () => {
+    for (const source of [workflow, observationWorkflow, groWorkflow]) {
+      expect(source).toContain("b2_canary:");
+      expect(source).toContain("needs: b2_canary");
+      expect(source).toContain("needs.b2_canary.result == 'success'");
+    }
+    expect(workflow).toContain('B2_RAW_MAINTENANCE_LIMIT: "1"');
+    expect(observationWorkflow).toContain('OBS_ARCHIVE_LIMIT: "1"');
+    expect(groWorkflow).toContain('GRO_ARCHIVE_SUFFIX: "0"');
+  });
+
   it("never auto-triggers the heavy production coverage refresh and requires free-tier headroom", () => {
     expect(productionCoverageWorkflow).toContain("workflow_dispatch:");
     expect(productionCoverageWorkflow).not.toContain("branches: [main]");
