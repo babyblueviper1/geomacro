@@ -2,6 +2,10 @@ name: B2 observation raw payload maintenance
 
 on:
   workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/b2-observation-payload-maintenance.yml"
   schedule:
     - cron: "*/10 * * * *"
 
