@@ -1,0 +1,53 @@
+name: GRO Canonical JSON Edge Vectors
+
+# Cross-implementation conformance for geomacro-canonical-json-v1: the repo's TypeScript canonicalizers and an
+# independent Python implementation must both reproduce the committed edge vector byte for byte.
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - "src/lib/risk-object-signing.server.ts"
+      - "src/lib/canonical-json.ts"
+      - "docs/GRO_CANONICAL_JSON_V1.md"
+      - "test-vectors/gro-canonical-json-v1-edge-vectors.json"
+      - "verifiers/python/verify_gro.py"
+      - "scripts/check-gro-canonical-vectors.ts"
+      - ".github/workflows/gro-canonical-edge-vectors.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/lib/risk-object-signing.server.ts"
+      - "src/lib/canonical-json.ts"
+      - "docs/GRO_CANONICAL_JSON_V1.md"
+      - "test-vectors/gro-canonical-json-v1-edge-vectors.json"
+      - "verifiers/python/verify_gro.py"
+      - "scripts/check-gro-canonical-vectors.ts"
+      - ".github/workflows/gro-canonical-edge-vectors.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  edge-vectors:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun 1.4.2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.2
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: TypeScript canonicalizers reproduce the edge vector
+        run: bun scripts/check-gro-canonical-vectors.ts
+
+      - name: Independent Python implementation reproduces the edge vector
+        run: python3 verifiers/python/verify_gro.py --vectors test-vectors/gro-canonical-json-v1-edge-vectors.json
