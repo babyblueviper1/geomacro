@@ -3,7 +3,7 @@ import { getRequestIP } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { toCommercialAskBrief } from "./ask-commercial-brief";
 import { assertSameOrigin } from "./origin-guard";
-import { answerQuestion, type AskAnswer } from "./ask-intelligence.server";
+import { answerQuestion, type HybridAskAnswer } from "./hybrid-ask-intelligence.server";
 import { checkAskRateLimit } from "./ask-rate-limit.server";
 
 const INJECTION_RE =
@@ -18,7 +18,7 @@ const AskInput = z.object({
     .refine((value) => !INJECTION_RE.test(value), { message: "Invalid input" }),
 });
 
-export type { AskAnswer };
+export type AskAnswer = HybridAskAnswer;
 
 export const askGeomacro = createServerFn({ method: "POST" })
   .validator((input: unknown) => AskInput.parse(input))
@@ -28,5 +28,5 @@ export const askGeomacro = createServerFn({ method: "POST" })
     if (!checkAskRateLimit(ip)) {
       throw new Error("Too many requests. Please wait a moment.");
     }
-    return toCommercialAskBrief(await answerQuestion(data.question));
+    return toCommercialAskBrief(await answerQuestion(data.question)) as AskAnswer;
   });

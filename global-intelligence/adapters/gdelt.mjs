@@ -1,6 +1,12 @@
 import {getJson,observation} from "./http.mjs";
 export async function searchGdelt(countryIso2,{queryExtra=""}={}) {
-  const q=encodeURIComponent(`country:${countryIso2} ${queryExtra}`.trim());
+  const countryFilter=String(countryIso2||"").trim().toUpperCase();
+  const query=[countryFilter ? `country:${countryFilter}` : "",String(queryExtra||"").trim()]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  if(!query) throw new Error("GDELT query is required");
+  const q=encodeURIComponent(query);
   const url=`https://api.gdeltproject.org/api/v2/doc/doc?query=${q}&mode=ArtList&format=json&maxrecords=50&sort=HybridRel`;
   const data=await getJson(url);
   return (data.articles ?? []).map(a=>observation({

@@ -20,8 +20,19 @@ function indicatorsForQuestion(question) {
 }
 
 export async function fetchMacro(question, {countryIso3 = null} = {}) {
-  if (!countryIso3) throw new Error("countryIso3 is required for macro intelligence.");
-  return fetchWorldBank(countryIso3, {indicators: indicatorsForQuestion(question), mrv: 5});
+  const requestedIndicators = indicatorsForQuestion(question);
+  if (!countryIso3) {
+    return {
+      observations: [],
+      requested_indicators: requestedIndicators,
+      skipped_reason: "country_context_required"
+    };
+  }
+  const observations = await fetchWorldBank(countryIso3, {indicators: requestedIndicators, mrv: 5});
+  return {
+    observations: Array.isArray(observations) ? observations : observations?.observations ?? [],
+    requested_indicators: requestedIndicators
+  };
 }
 
 export async function createMacroAdapter() {
