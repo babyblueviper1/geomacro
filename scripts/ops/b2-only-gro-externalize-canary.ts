@@ -24,16 +24,16 @@ const cutoff = new Date(Date.now() - 72 * 3_600_000).toISOString();
 const { data: rows, error } = await db.from("geomacro_risk_objects")
   .select("object_id,payload,payload_hash,signature,signing_key_id,expires_at,archive_key")
   .is("archive_key", null).not("payload", "is", null)
-  .lt("expires_at", cutoff).order("generated_at", { ascending: true }).limit(1);
+  .eq("signing_key_id", "geomacro-risk-2026-03").not("signature", "is", null)
+  .lt("expires_at", cutoff).order("generated_at", { ascending: true }).limit(10);
 if (error || !rows?.length) throw error ?? new Error("B2_ONLY_GRO_SOURCE_UNAVAILABLE");
-const row = rows[0];
+const row = rows.find(candidate => /^gro_[A-Za-z0-9_]+$/.test(candidate.object_id) &&
+  candidate.payload?.object_id === candidate.object_id &&
+  candidate.payload?.integrity?.payload_hash === candidate.payload_hash &&
+  candidate.payload?.integrity?.signing_key_id === candidate.signing_key_id &&
+  verifyRiskObjectSignature(candidate.payload, keys).valid);
+if (!row) throw new Error("B2_ONLY_GRO_NO_VALID_SIGNED_SOURCE");
 const id = row.object_id;
-if (!/^gro_[A-Za-z0-9_]+$/.test(id) || row.payload?.object_id !== id ||
-    row.payload?.integrity?.payload_hash !== row.payload_hash ||
-    row.payload?.integrity?.signing_key_id !== row.signing_key_id ||
-    !row.signature || !verifyRiskObjectSignature(row.payload, keys).valid) {
-  throw new Error("B2_ONLY_GRO_SOURCE_SIGNATURE_INVALID");
-}
 const raw = Buffer.from(JSON.stringify(row.payload));
 const compressed = gzipSync(raw, { level: 9 });
 if (compressed.length > 2_000_000 || raw.length > 4_000_000) throw new Error("B2_ONLY_GRO_TOO_LARGE");
