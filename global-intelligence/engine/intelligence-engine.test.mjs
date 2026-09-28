@@ -78,6 +78,35 @@ test("sanitized answer is served from process-memory short cache", async () => {
   assert.equal(counter.calls, 1);
 });
 
+test("forceLive skips permanent data but still reuses the short cache", async () => {
+  const counter = {calls: 0};
+  const adapters = verifiedAdapters(counter);
+  const question = `latest shipping security cache test ${Date.now()}`;
+  let permanentReads = 0;
+  const permanentReader = async () => {
+    permanentReads += 1;
+    return {sufficient: true, data: {should_not_be_used: true}};
+  };
+
+  const first = await answerQuestion(question, {
+    countryIso3: "IND",
+    adapters,
+    permanentReader,
+    options: {cacheTtlMs: 60_000, forceLive: true}
+  });
+  const second = await answerQuestion(question, {
+    countryIso3: "IND",
+    adapters,
+    permanentReader,
+    options: {cacheTtlMs: 60_000, forceLive: true}
+  });
+
+  assert.equal(first.data_mode, "ephemeral_live");
+  assert.equal(second.data_mode, "short_cache");
+  assert.equal(counter.calls, 1);
+  assert.equal(permanentReads, 0);
+});
+
 test("permanent reader wins when it reports sufficient fresh internal data", async () => {
   const counter = {calls: 0};
   const result = await answerQuestion("shipping security permanent test", {
