@@ -3,6 +3,9 @@ import { parseB2Endpoint } from "./b2-archive-contract.mjs";
 
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const hmac = (key, value) => createHmac("sha256", key).update(value).digest();
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const TRANSIENT_STATUSES = new Set([429, 500, 502, 503, 504]);
+const MAX_ATTEMPTS = 4;
 
 export function createB2Client({ endpointUrl, accessKey, secretKey, bucket }) {
   const endpoint = parseB2Endpoint(endpointUrl);
@@ -15,30 +18,51 @@ export function createB2Client({ endpointUrl, accessKey, secretKey, bucket }) {
     }
     const path = `/${[bucket, ...key.split("/")].map(encodeURIComponent).join("/")}`;
     const host = new URL(endpoint.endpoint).host;
-    const timestamp = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
-    const day = timestamp.slice(0, 8);
     const payloadHash = sha(body);
-    const headers = { host, "x-amz-content-sha256": payloadHash, "x-amz-date": timestamp };
-    const names = Object.keys(headers).sort();
-    const canonicalHeaders = names.map((name) => `${name}:${headers[name]}\n`).join("");
-    const signedHeaders = names.join(";");
-    const canonical = [method, path, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
-    const scope = `${day}/${endpoint.region}/s3/aws4_request`;
-    const stringToSign = ["AWS4-HMAC-SHA256", timestamp, scope, sha(canonical)].join("\n");
-    const signatureKey = hmac(hmac(hmac(hmac(`AWS4${secretKey}`, day), endpoint.region), "s3"), "aws4_request");
-    const signature = createHmac("sha256", signatureKey).update(stringToSign).digest("hex");
-    const result = await fetch(`${endpoint.endpoint}${path}`, {
-      method,
-      headers: {
-        "x-amz-content-sha256": payloadHash,
-        "x-amz-date": timestamp,
-        Authorization: `AWS4-HMAC-SHA256 Credential=${accessKey}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
-      },
-      body: method === "PUT" ? body : undefined,
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (!result.ok) throw new Error(`B2_${method}_FAILED_${result.status}`);
-    return Buffer.from(await result.arrayBuffer());
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      const timestamp = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
+      const day = timestamp.slice(0, 8);
+      const headers = { host, "x-amz-content-sha256": payloadHash, "x-amz-date": timestamp };
+      const names = Object.keys(headers).sort();
+      const canonicalHeaders = names.map((name) => `${name}:${headers[name]}\n`).join("");
+      const signedHeaders = names.join(";");
+      const canonical = [method, path, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
+      const scope = `${day}/${endpoint.region}/s3/aws4_request`;
+      const stringToSign = ["AWS4-HMAC-SHA256", timestamp, scope, sha(canonical)].join("\n");
+      const signatureKey = hmac(hmac(hmac(hmac(`AWS4${secretKey}`, day), endpoint.region), "s3"), "aws4_request");
+      const signature = createHmac("sha256", signatureKey).update(stringToSign).digest("hex");
+
+      try {
+        const result = await fetch(`${endpoint.endpoint}${path}`, {
+          method,
+          headers: {
+            "x-amz-content-sha256": payloadHash,
+            "x-amz-date": timestamp,
+            Authorization: `AWS4-HMAC-SHA256 Credential=${accessKey}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
+          },
+          body: method === "PUT" ? body : undefined,
+          signal: AbortSignal.timeout(60_000),
+        });
+
+        if (result.ok) return Buffer.from(await result.arrayBuffer());
+        if (!TRANSIENT_STATUSES.has(result.status) || attempt === MAX_ATTEMPTS) {
+          throw new Error(`B2_${method}_FAILED_${result.status}`);
+        }
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        const explicitHttpFailure = /^B2_(PUT|GET)_FAILED_\d+$/.test(message);
+        if (explicitHttpFailure || attempt === MAX_ATTEMPTS) throw cause;
+      }
+
+      await sleep(500 * 2 ** (attempt - 1));
+    }
+
+    throw new Error(`B2_${method}_RETRY_EXHAUSTED`);
   }
-  return { put: (key, bytes) => request("PUT", key, bytes), get: (key) => request("GET", key) };
+
+  return {
+    put: (key, bytes) => request("PUT", key, bytes),
+    get: (key) => request("GET", key),
+  };
 }
