@@ -85,8 +85,10 @@ Deno.serve(async request => {
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const access = Deno.env.get("B2_ARCHIVE_WRITE_KEY_ID")?.trim();
   const secret = Deno.env.get("B2_ARCHIVE_WRITE_APPLICATION_KEY")?.trim();
-  if (!url || !service || !access || !secret || new URL(url).hostname !== "ldpwajisioljyjtojvfx.supabase.co") {
-    return new Response("Archive configuration unavailable", { status: 503 });
+  const missing = [!url && "SUPABASE_URL", !service && "SUPABASE_SERVICE_ROLE_KEY",
+    !access && "B2_ARCHIVE_WRITE_KEY_ID", !secret && "B2_ARCHIVE_WRITE_APPLICATION_KEY"].filter(Boolean);
+  if (missing.length || !url || new URL(url).hostname !== "ldpwajisioljyjtojvfx.supabase.co") {
+    return Response.json({ error: "ARCHIVE_CONFIG_UNAVAILABLE", missing_names: missing }, { status: 503 });
   }
   const headers = { apikey: service, authorization: `Bearer ${service}` };
   try {
