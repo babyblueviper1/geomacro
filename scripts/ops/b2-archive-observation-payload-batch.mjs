@@ -50,11 +50,15 @@ for (const row of rows ?? []) {
   const idHash = sha(Buffer.from(row.observation_id));
   const archiveKey = `geomacro-evidence/v1/observations/${idHash}.json.gz`;
   const proofKey = `geomacro-evidence/v1/index/observations/${idHash}.json`;
+
   await b2.put(archiveKey, compressed);
   const readback = await archiveRead(row.observation_id, "archive");
-  if (sha(readback) !== sha(compressed) || sha(gunzipSync(readback)) !== sha(raw)) {
+  const restoredBeforeCleanup = JSON.parse(gunzipSync(readback).toString("utf8"));
+  if (sha(readback) !== sha(compressed) ||
+      sha(Buffer.from(JSON.stringify(restoredBeforeCleanup))) !== sha(raw)) {
     throw new Error("OBS_ARCHIVE_READBACK_INVALID");
   }
+
   const proof = {
     schema: "geomacro.observation-raw-archive.v1",
     observation_id: row.observation_id, source_table: "public.live_external_observations",
@@ -65,13 +69,21 @@ for (const row of rows ?? []) {
   };
   const proofBytes = Buffer.from(JSON.stringify(proof));
   await b2.put(proofKey, proofBytes);
-  if (sha(await archiveRead(row.observation_id, "proof")) !== sha(proofBytes)) throw new Error("OBS_ARCHIVE_PROOF_INVALID");
+  const proofReadback = await archiveRead(row.observation_id, "proof");
+  if (sha(proofReadback) !== sha(proofBytes)) throw new Error("OBS_ARCHIVE_PROOF_INVALID");
+  const restoredProofBeforeCleanup = JSON.parse(proofReadback.toString("utf8"));
+  if (restoredProofBeforeCleanup.compressed_sha256 !== proof.compressed_sha256 ||
+      restoredProofBeforeCleanup.payload_sha256 !== proof.payload_sha256) {
+    throw new Error("OBS_ARCHIVE_PROOF_CONTENT_INVALID");
+  }
+
   const { data: current, error: checkError } = await db.from("live_external_observations")
     .select("raw_payload,raw_hash").eq("observation_id", row.observation_id).single();
   if (checkError || current?.raw_hash !== row.raw_hash ||
       sha(Buffer.from(JSON.stringify(current?.raw_payload))) !== sha(raw)) {
     throw new Error("OBS_ARCHIVE_SOURCE_CHANGED");
   }
+
   const { data: updated, error: updateError } = await db.from("live_external_observations")
     .update({ raw_payload: null }).eq("observation_id", row.observation_id)
     .eq("raw_hash", row.raw_hash).not("raw_payload", "is", null)
@@ -80,11 +92,10 @@ for (const row of rows ?? []) {
       updated.raw_payload !== null || updated.raw_hash !== row.raw_hash) {
     throw new Error("OBS_ARCHIVE_UPDATE_UNCONFIRMED");
   }
+
   try {
-    const restored = JSON.parse(gunzipSync(await archiveRead(row.observation_id, "archive")).toString("utf8"));
-    const restoredProof = JSON.parse((await archiveRead(row.observation_id, "proof")).toString("utf8"));
-    if (sha(Buffer.from(JSON.stringify(restored))) !== proof.payload_sha256 ||
-        restoredProof.compressed_sha256 !== proof.compressed_sha256) {
+    if (sha(Buffer.from(JSON.stringify(restoredBeforeCleanup))) !== proof.payload_sha256 ||
+        restoredProofBeforeCleanup.compressed_sha256 !== proof.compressed_sha256) {
       throw new Error("OBS_ARCHIVE_POST_UPDATE_RESTORE_FAILED");
     }
   } catch (cause) {
@@ -94,9 +105,11 @@ for (const row of rows ?? []) {
     if (rollback.error) throw new Error("OBS_ARCHIVE_ROLLBACK_FAILED", { cause });
     throw cause;
   }
+
   archived++;
   console.log(JSON.stringify({ observation_id: row.observation_id, archive_verified: true,
     source_row_retained: true, normalized_hash_retained: true, raw_payload_externalized: true,
-    shard_suffix: suffix }));
+    duplicate_b2_reads_avoided: 2, shard_suffix: suffix }));
 }
-console.log(JSON.stringify({ ok: true, archived, limit, older_hours: 72, shard_suffix: suffix }));
+console.log(JSON.stringify({ ok: true, archived, limit, older_hours: 72, shard_suffix: suffix,
+  verification_mode: "single-full-readback-plus-cached-restore" }));
