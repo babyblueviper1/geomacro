@@ -13,17 +13,21 @@ describe("mainnet commercial website surface", () => {
     expect(root).toContain("<CustomerCare />");
     expect(care).toContain('const EMAIL = "contact@geomacro.live"');
     expect(care).toContain("Customer Care");
-    expect(care).toContain("What do machines get?");
+    expect(care).toContain("What is live at launch?");
   });
 
-  it("keeps the commercial product identity separate from testnet proofs", () => {
+  it("keeps launch products separate from roadmap and testnet proofs", () => {
     const home = read("src/components/home/commercial-home.tsx");
     const contact = read("src/routes/contact.tsx");
     const institution = read("src/routes/institutional.tsx");
 
-    expect(home).toContain("For people");
-    expect(home).toContain("For machines & agents");
+    expect(home).toContain("Available at launch");
+    expect(home).toContain("Risk Intelligence");
+    expect(home).toContain("Separate Risk Indices");
     expect(home).toContain("Critical Minerals & Rare Earth Risk");
+    expect(home).toContain("Ask Geomacro");
+    expect(home).toContain("Roadmap, not launch promise");
+    expect(home).toContain("Paid agent and x402 production access");
     expect(contact).toContain("Prediction Markets, Bridge and Swap remain separate testnet technical proofs");
     expect(institution).toContain("Prediction Markets, Bridge and Swap remain separate testnet technical proofs");
   });
