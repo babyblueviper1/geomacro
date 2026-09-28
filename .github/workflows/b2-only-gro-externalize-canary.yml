@@ -2,7 +2,7 @@ name: Signed GRO B2-only externalization automation
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "25 * * * *"
   workflow_dispatch:
   push:
     branches: [main]
@@ -22,12 +22,12 @@ jobs:
     if: ${{ github.repository == 'blocknine0/geomacro' && github.ref == 'refs/heads/main' }}
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 2
       matrix:
         suffix: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"]
     name: externalize_verified_batch_${{ matrix.suffix }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 25
     environment: production
     env:
       APP_SUPABASE_URL: ${{ secrets.APP_SUPABASE_URL }}
@@ -46,16 +46,5 @@ jobs:
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile --ignore-scripts
-      - name: Externalize up to 30 expired signed GROs for this shard
-        shell: bash
-        run: |
-          set -euo pipefail
-          for i in $(seq 1 30); do
-            echo "Verified GRO shard ${GRO_ARCHIVE_SUFFIX} iteration ${i}/30"
-            output="$(bun scripts/ops/b2-only-gro-externalize-canary.ts)"
-            echo "$output"
-            if echo "$output" | grep -q '"status":"complete"'; then
-              echo "No more eligible signed expired GRO payloads for shard ${GRO_ARCHIVE_SUFFIX}."
-              break
-            fi
-          done
+      - name: Externalize one verified expired signed GRO for this shard
+        run: bun scripts/ops/b2-only-gro-externalize-canary.ts
