@@ -1,6 +1,7 @@
-name: Signed GRO B2-only externalization canary
+name: Signed GRO B2-only externalization bounded batch
 
-# Safety trigger: one-object verified archive canary only. Bulk externalization remains disabled until this passes.
+# Safety mode: run the proven one-object canary five times serially. Each iteration verifies
+# signature, B2 readback, archive proof, DB pointer update and live restore; failures stop the batch.
 on:
   push:
     branches: [main]
@@ -14,10 +15,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  externalize_one:
+  externalize_five_verified:
     if: ${{ github.repository == 'blocknine0/geomacro' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: production
     env:
       APP_SUPABASE_URL: ${{ secrets.APP_SUPABASE_URL }}
@@ -35,4 +36,11 @@ jobs:
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile --ignore-scripts
-      - run: bun scripts/ops/b2-only-gro-externalize-canary.ts
+      - name: Externalize five signed expired GROs, one verified object at a time
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            echo "Verified GRO archive iteration ${i}/5"
+            bun scripts/ops/b2-only-gro-externalize-canary.ts
+          done
