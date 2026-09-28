@@ -1,0 +1,63 @@
+{
+  "vector_version": "federico-strict-positive-control-v1",
+  "description": "Deterministic known-good CHN evidence vector proving federico-strict-evidence-v1 is selective, not permanently closed. Synthetic fixture only; never used as live evidence.",
+  "country_iso3": "CHN",
+  "as_of": "2026-09-28T12:00:00.000Z",
+  "calculation_namespace": "federico_strict_evidence_v1",
+  "events": [
+    {
+      "id": "fixture_china_trade_policy_001",
+      "domain": "geopolitics",
+      "event_type": "trade_policy_update",
+      "title": "Synthetic positive-control: corroborated China trade-policy development",
+      "primary_country": "CHN",
+      "countries": ["CHN"],
+      "severity": 60,
+      "confidence": 92,
+      "direction": "steady",
+      "first_seen_at": "2026-09-28T11:20:00.000Z",
+      "last_seen_at": "2026-09-28T11:30:00.000Z",
+      "material_evidence_at": "2026-09-28T11:30:00.000Z",
+      "evidence_count": 2,
+      "independent_source_count": 2,
+      "evidence_refs": [],
+      "structure_version": "fixture-live-structure-v1.0.0",
+      "structured_payload": {
+        "scoring_version": "fixture-scoring-v1",
+        "relevance_version": "fixture-relevance-v1",
+        "country_version": "fixture-country-v1",
+        "story_version": "fixture-story-v1"
+      },
+      "event_family_id": "fixture-family-china-trade-policy-001",
+      "source_ids": ["bbc_world_rss", "aljazeera_rss"],
+      "source_record_ids": ["fixture-bbc-001", "fixture-aj-001"],
+      "source_urls": [],
+      "source_families": ["bbc_world", "aljazeera"],
+      "content_hashes": ["fixture-content-bbc-001", "fixture-content-aj-001"],
+      "relevance_reason": "Synthetic direct CHN attribution for positive-control testing",
+      "transmission_channel": "fixture",
+      "relevance_weight": 1,
+      "subject_is_primary": true,
+      "subject_attribution_confidence": 100,
+      "subject_attribution_method": "fixture_direct_country",
+      "corroboration_status": "CONFIRMED"
+    }
+  ],
+  "commercial_eligibility": [
+    {
+      "event_id": "fixture_china_trade_policy_001",
+      "status": "VERIFIED",
+      "reason_codes": []
+    }
+  ],
+  "expected": {
+    "publication_policy_accepts": true,
+    "schema_version": "gro-1.1",
+    "decision_readiness_status": "DEGRADED",
+    "decision_readiness_reason_codes": ["uncalibrated_uncertainty_interval"],
+    "commercial_eligibility_status": "VERIFIED",
+    "verification_status": "VERIFIED",
+    "evidence_event_count": 1,
+    "independent_source_count": 2
+  }
+}

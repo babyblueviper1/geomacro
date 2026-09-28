@@ -1,0 +1,61 @@
+name: Federico Strict Positive Control
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - "src/lib/country-risk-engine.ts"
+      - "src/lib/country-risk-commercial-eligibility.ts"
+      - "src/lib/federico-publication-policy.ts"
+      - "src/lib/public-demo-risk-profile.ts"
+      - "scripts/check-federico-positive-control.ts"
+      - "test-vectors/federico-strict-positive-control-v1.json"
+      - ".github/workflows/federico-strict-positive-control.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/lib/country-risk-engine.ts"
+      - "src/lib/country-risk-commercial-eligibility.ts"
+      - "src/lib/federico-publication-policy.ts"
+      - "src/lib/public-demo-risk-profile.ts"
+      - "scripts/check-federico-positive-control.ts"
+      - "test-vectors/federico-strict-positive-control-v1.json"
+      - ".github/workflows/federico-strict-positive-control.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  positive-control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun 1.4.2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.2
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Verify known-good Federico strict vector
+        run: bun scripts/check-federico-positive-control.ts | tee /tmp/federico-positive-control.json
+
+      - name: Assert selective gate opens for the fixture
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const result = JSON.parse(fs.readFileSync('/tmp/federico-positive-control.json', 'utf8'));
+          if (result.ok !== true) throw new Error('positive control did not report ok=true');
+          if (result.policy_version !== 'federico-strict-evidence-v1') throw new Error('unexpected policy version');
+          if (result.publication_policy_accepts !== true) throw new Error('strict publication policy did not accept fixture');
+          if (result.verification?.status !== 'VERIFIED') throw new Error('fixture verification not VERIFIED');
+          if (result.commercial_eligibility?.status !== 'VERIFIED') throw new Error('fixture commercial eligibility not VERIFIED');
+          if ((result.evidence_summary?.independent_source_count ?? 0) < 2) throw new Error('fixture lacks two independent source families');
+          console.log('PASS: federico-strict-evidence-v1 opens for the deterministic known-good fixture.');
+          NODE
