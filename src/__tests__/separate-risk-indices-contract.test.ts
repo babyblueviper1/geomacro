@@ -108,7 +108,7 @@ describe("separate public risk indices contract", () => {
     expect(homeSection).not.toContain("GlobalRiskIndexSection");
   });
 
-  it("never renders a public risk-index unavailable error on primary or secondary website surfaces", () => {
+  it("never renders a public risk-index unavailable error on primary or buyer-facing website surfaces", () => {
     const publicSurfaces = [
       read("src/components/home/risk-indices-preview.tsx"),
       read("src/components/risk-indices/risk-indices-workspace.tsx"),
@@ -123,9 +123,11 @@ describe("separate public risk indices contract", () => {
     }
 
     const workspace = read("src/components/risk-indices/risk-indices-workspace.tsx");
+    const institutional = read("src/routes/institutional.tsx");
     expect(workspace).not.toContain("risk.error?.message");
     expect(workspace).not.toContain("Verified risk indices unavailable");
     expect(read("src/routes/intelligence.tsx")).toContain("useRiskIndices");
-    expect(read("src/routes/institutional.tsx")).toContain("useRiskIndices");
+    expect(institutional).toContain("Separate Geopolitical, Macroeconomic and Critical Minerals Risk Indices");
+    expect(institutional).not.toContain("useRiskIndices");
   });
 });
