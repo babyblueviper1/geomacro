@@ -130,7 +130,9 @@ export async function answerQuestion(
     }
   }
 
-  if (cacheTtlMs > 0 && options.forceLive !== true) {
+  // Freshness-sensitive questions skip the permanent reader but still benefit
+  // from the short in-memory cache. Use bypassCache only for explicit operator/test refreshes.
+  if (cacheTtlMs > 0 && options.bypassCache !== true) {
     const cached = runtimeCache.get(key);
     if (cached && cached.expires_at_ms > now) {
       const answer = cloneCached(cached.answer);
