@@ -323,7 +323,24 @@ function rowToCommercialEligibility(
 }
 
 
-async function loadRecentStructuredEvents(
+// The global sovereign refresh passes one exact as_of to every country. Reuse
+// the same immutable read within that single batch instead of paginating the
+// 72-hour structured-event window 195+ times. Server requests stay uncached.
+let globalRecentEvents: { key: string; promise: Promise<LoadedStructuredEvents> } | null = null;
+
+function loadRecentStructuredEvents(asOf: Date): Promise<LoadedStructuredEvents> {
+  if (!process.env.GLOBAL_CANONICAL_REFRESH_OUTPUT) return loadRecentStructuredEventsUncached(asOf);
+  const key = asOf.toISOString();
+  if (globalRecentEvents?.key === key) return globalRecentEvents.promise;
+  const promise = loadRecentStructuredEventsUncached(asOf);
+  globalRecentEvents = { key, promise };
+  promise.catch(() => {
+    if (globalRecentEvents?.promise === promise) globalRecentEvents = null;
+  });
+  return promise;
+}
+
+async function loadRecentStructuredEventsUncached(
   asOf: Date,
 ): Promise<LoadedStructuredEvents> {
   const db =
