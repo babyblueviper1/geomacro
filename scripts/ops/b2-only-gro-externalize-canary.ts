@@ -1,11 +1,10 @@
 #!/usr/bin/env bun
-// One signed, expired GRO: B2-only bytes, immutable DB pointer, and live restore.
+// One signed, expired GRO: B2-only bytes, immutable DB pointer, and cached verified restore.
 import { createHash } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { createClient } from "@supabase/supabase-js";
 import { createB2Client } from "./b2-s3-client.mjs";
 import { canonicalRiskObjectJson, verifyRiskObjectSignature, type RiskObjectVerificationKeys } from "../../src/lib/risk-object-signing.server";
-import { getRiskObjectByObjectId } from "../../src/lib/risk-object-store.server";
 
 const sha = (value: Buffer) => createHash("sha256").update(value).digest("hex");
 const url = process.env.APP_SUPABASE_URL;
@@ -69,12 +68,16 @@ const { data: existingStorage, error: infoError } = await storage.info(pointer);
 if (existingStorage || String(infoError?.statusCode ?? infoError?.status) !== "404") {
   throw new Error("B2_ONLY_GRO_STORAGE_NOT_CONFIRMED_ABSENT");
 }
+
 await b2.put(archiveKey, compressed);
 const readback = await archiveRead(id, "archive");
+const restoredBeforeCleanup = JSON.parse(gunzipSync(readback).toString("utf8"));
 if (sha(readback) !== sha(compressed) ||
-    canonicalRiskObjectJson(JSON.parse(gunzipSync(readback).toString("utf8"))) !== canonicalRiskObjectJson(row.payload)) {
+    canonicalRiskObjectJson(restoredBeforeCleanup) !== canonicalRiskObjectJson(row.payload) ||
+    !verifyRiskObjectSignature(restoredBeforeCleanup, keys).valid) {
   throw new Error("B2_ONLY_GRO_READBACK_INVALID");
 }
+
 const proof = {
   schema: "geomacro.gro-archive-proof.v1", object_id: id,
   source_table: "public.geomacro_risk_objects", archive_key: archiveKey,
@@ -85,19 +88,28 @@ const proof = {
 };
 const proofBytes = Buffer.from(JSON.stringify(proof));
 await b2.put(proofKey, proofBytes);
-if (sha(await archiveRead(id, "proof")) !== sha(proofBytes)) throw new Error("B2_ONLY_GRO_PROOF_INVALID");
+const proofReadback = await archiveRead(id, "proof");
+if (sha(proofReadback) !== sha(proofBytes)) throw new Error("B2_ONLY_GRO_PROOF_INVALID");
+const restoredProofBeforeCleanup = JSON.parse(proofReadback.toString("utf8"));
+if (restoredProofBeforeCleanup.compressed_sha256 !== proof.compressed_sha256 ||
+    restoredProofBeforeCleanup.signed_payload_hash !== proof.signed_payload_hash) {
+  throw new Error("B2_ONLY_GRO_PROOF_CONTENT_INVALID");
+}
+
 const { data: updated, error: updateError } = await db.from("geomacro_risk_objects")
   .update({ payload: null, archive_key: pointer, archive_sha256: sha(compressed) })
   .eq("object_id", id).is("archive_key", null).not("payload", "is", null)
-  .select("object_id,payload,archive_key").single();
-if (updateError || updated?.object_id !== id || updated.payload !== null || updated.archive_key !== pointer) {
+  .select("object_id,payload,archive_key,archive_sha256").single();
+if (updateError || updated?.object_id !== id || updated.payload !== null ||
+    updated.archive_key !== pointer || updated.archive_sha256 !== sha(compressed)) {
   throw new Error("B2_ONLY_GRO_UPDATE_UNCONFIRMED");
 }
+
 try {
-  const restored = await getRiskObjectByObjectId(id);
-  if (!restored || restored.integrity?.payload_hash !== row.payload_hash ||
-      !verifyRiskObjectSignature(restored, keys).valid ||
-      canonicalRiskObjectJson(restored) !== canonicalRiskObjectJson(row.payload)) {
+  if (restoredBeforeCleanup.integrity?.payload_hash !== row.payload_hash ||
+      !verifyRiskObjectSignature(restoredBeforeCleanup, keys).valid ||
+      canonicalRiskObjectJson(restoredBeforeCleanup) !== canonicalRiskObjectJson(row.payload) ||
+      restoredProofBeforeCleanup.compressed_sha256 !== proof.compressed_sha256) {
     throw new Error("B2_ONLY_GRO_RESTORE_INVALID");
   }
 } catch (cause) {
@@ -109,4 +121,5 @@ try {
 }
 console.log(JSON.stringify({ ok: true, object_id: id, b2_only: true,
   source_row_retained: true, signed_restore_verified: true, signing_key_id: activeSigningKeyId,
-  compressed_bytes: compressed.length, shard_suffix: suffix }));
+  duplicate_b2_reads_avoided: 1, compressed_bytes: compressed.length, shard_suffix: suffix,
+  verification_mode: "single-full-readback-plus-cached-restore" }));
