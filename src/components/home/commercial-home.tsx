@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, CheckCircle2, Handshake } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, Handshake, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentCommerceStatus } from "@/components/agent-commerce-status";
 
@@ -45,12 +45,28 @@ const BUYER_USE_CASES = [
   },
 ] as const;
 
+const HUMAN_DELIVERY = [
+  "Live Intelligence with current geopolitical, macroeconomic and critical-mineral developments",
+  "Separate Geopolitical, Macroeconomic and Critical Minerals Risk Indices",
+  "Dedicated Critical Minerals & Rare Earth Risk coverage",
+  "Ask Geomacro for grounded questions over current risk evidence",
+  "Research, evidence, methodology and explicit confidence boundaries",
+] as const;
+
+const MACHINE_DELIVERY = [
+  "Governed machine-readable country and corridor risk context",
+  "Versioned Risk Objects with evidence, freshness, confidence and integrity metadata when available",
+  "Risk Gate decision context for customer-controlled policy workflows",
+  "API and agent delivery layers that preserve source, security and entitlement controls",
+  "Fail-closed behavior when required verification, eligibility or production configuration is missing",
+] as const;
+
 const PRODUCT_STATUS = [
   ["LIVE", "Risk Intelligence", "Current geopolitical, macroeconomic and critical-mineral intelligence with evidence and confidence context."],
   ["LIVE", "Critical Minerals & Rare Earth Risk", "A dedicated risk view for rare-earth and critical-mineral supply concentration, geopolitical exposure and sourcing pressure."],
   ["LIVE", "Separate Risk Indices", "Geopolitical, Macroeconomic and Critical Minerals risk are presented independently."],
   ["LIVE", "Ask Geomacro", "Grounded Q&A over Geomacro's recorded evidence and current risk context."],
-  ["PRIVATE PILOT", "Risk Gate + signed Risk Objects", "Controlled country and directional-corridor decision context; not general production availability."],
+  ["CONTROLLED", "Risk Gate + signed Risk Objects", "Governed country and directional-corridor decision context is delivered only where the current access and production status permits it."],
 ] as const;
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -72,10 +88,10 @@ export function CommercialHome() {
             risk context.
           </h1>
           <p className="mt-7 max-w-3xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
-            Geomacro converts geopolitical, macroeconomic and critical-mineral developments into explainable risk intelligence for institutions, operators and AI systems.
+            Geomacro converts geopolitical, macroeconomic and critical-mineral developments into explainable risk intelligence for institutions, operators, software and AI systems.
           </p>
           <p className="mt-4 max-w-3xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-            The focus is simple: show what changed, why it matters, how confident the evidence is, and what a team or system should review next.
+            See what changed, why it matters, how confident the evidence is, and what a person or machine should review next.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild size="lg" className="gap-2">
@@ -84,10 +100,13 @@ export function CommercialHome() {
             <Button asChild size="lg" variant="outline">
               <Link to="/global-risk">Explore Risk Indices</Link>
             </Button>
+            <Button asChild size="lg" variant="ghost">
+              <Link to="/contact">Commercial access</Link>
+            </Button>
           </div>
           <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/60 pt-5">
             <AgentCommerceStatus compact />
-            <span className="text-xs text-muted-foreground">Risk Gate · controlled Private Pilot</span>
+            <span className="text-xs text-muted-foreground">Machine delivery follows the live production and access status shown by Geomacro.</span>
           </div>
         </div>
       </section>
@@ -107,6 +126,32 @@ export function CommercialHome() {
               <Button asChild variant="outline"><Link to="/intelligence">See supporting intelligence</Link></Button>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 sm:py-18">
+        <div className="max-w-3xl">
+          <SectionLabel>Commercial delivery</SectionLabel>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">One intelligence foundation. Two ways to consume it.</h2>
+          <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+            People get reviewable intelligence and evidence. Software and AI agents get governed machine-readable context. Both remain tied to the same risk state and explicit product boundaries.
+          </p>
+        </div>
+        <div className="mt-9 grid gap-6 lg:grid-cols-2">
+          <article className="rounded-2xl border border-border/70 bg-card/40 p-6 sm:p-8">
+            <div className="flex items-center gap-2"><UserRound className="h-5 w-5 text-primary" /><h3 className="text-xl font-semibold">For people</h3></div>
+            <ul className="mt-5 space-y-3 text-sm leading-relaxed text-muted-foreground">
+              {HUMAN_DELIVERY.map((item) => <li key={item} className="flex gap-3"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><span>{item}</span></li>)}
+            </ul>
+            <Button asChild variant="outline" className="mt-6"><Link to="/intelligence">Explore human-facing intelligence</Link></Button>
+          </article>
+          <article className="rounded-2xl border border-border/70 bg-card/40 p-6 sm:p-8">
+            <div className="flex items-center gap-2"><Bot className="h-5 w-5 text-primary" /><h3 className="text-xl font-semibold">For machines & agents</h3></div>
+            <ul className="mt-5 space-y-3 text-sm leading-relaxed text-muted-foreground">
+              {MACHINE_DELIVERY.map((item) => <li key={item} className="flex gap-3"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><span>{item}</span></li>)}
+            </ul>
+            <Button asChild variant="outline" className="mt-6"><Link to="/data-api">Review Data & API delivery</Link></Button>
+          </article>
         </div>
       </section>
 
@@ -171,9 +216,9 @@ export function CommercialHome() {
         <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
           <div className="max-w-3xl">
             <SectionLabel>Product status</SectionLabel>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight">Clear about what is live, and what is still controlled.</h2>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight">Clear about what is live, and what is controlled.</h2>
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-              Private Pilot and pre-launch capabilities are labelled separately from generally available product surfaces.
+              Geomacro does not present a controlled, testnet or unavailable capability as a generally available production product.
             </p>
           </div>
           <Button asChild variant="outline"><Link to="/roadmap">View full roadmap</Link></Button>
@@ -229,10 +274,10 @@ export function CommercialHome() {
             <SectionLabel>Work with Geomacro</SectionLabel>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Bring one real risk-sensitive workflow. We will show where Geomacro fits and where it does not.</h2>
             <p className="mt-4 max-w-3xl text-base leading-relaxed text-muted-foreground">
-              For design partners, data and infrastructure providers, financial platforms, AI-agent ecosystems and institutional teams evaluating external-risk decision infrastructure.
+              For institutional teams, operators, data and infrastructure providers, financial platforms, AI-agent ecosystems and partners evaluating external-risk decision infrastructure.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <Button asChild size="lg" className="gap-2"><Link to="/contact">Start a conversation <ArrowRight className="h-4 w-4" /></Link></Button>
+              <Button asChild size="lg" className="gap-2"><Link to="/contact">Discuss commercial access <ArrowRight className="h-4 w-4" /></Link></Button>
               <Button asChild size="lg" variant="outline"><Link to="/institutional">Institutional use cases</Link></Button>
               <Button asChild size="lg" variant="ghost"><Link to="/docs">Technical documentation</Link></Button>
             </div>
