@@ -44,8 +44,8 @@ Deno.serve(async request => {
   if (role !== "service_role") return new Response("Forbidden", { status: 403 });
   const url = Deno.env.get("SUPABASE_URL");
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const access = Deno.env.get("B2_ARCHIVE_READ_KEY_ID");
-  const secret = Deno.env.get("B2_ARCHIVE_READ_APPLICATION_KEY");
+  const access = Deno.env.get("B2_ARCHIVE_READ_KEY_ID")?.trim();
+  const secret = Deno.env.get("B2_ARCHIVE_READ_APPLICATION_KEY")?.trim();
   if (!url || !service || !access || !secret || new URL(url).hostname !== "ldpwajisioljyjtojvfx.supabase.co") {
     return new Response("Archive configuration unavailable", { status: 503 });
   }
@@ -80,7 +80,7 @@ Deno.serve(async request => {
     return new Response(raw, { headers: { "content-type": "application/octet-stream", "cache-control": "private, no-store",
       "x-geomacro-snapshot-id": id } });
   } catch (error) {
-    console.error("RAW_SNAPSHOT_RESTORE_FAILED", error instanceof Error ? error.message : "unknown");
+    console.error("RAW_SNAPSHOT_RESTORE_FAILED", error instanceof Error ? error.name : "unknown");
     return new Response("Archive unavailable", { status: 502 });
   }
 });
