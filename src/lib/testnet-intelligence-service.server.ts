@@ -13,7 +13,7 @@ import { recordTestnetDeveloperApiFunnelEvent } from "./testnet-api-funnel-telem
 import { structuredDeliveryPolicy } from "./structured-data-entitlement-registry";
 import { settleTestnetApiCall } from "./testnet-api-payment.server";
 import { loadTestnetAssistiveContext } from "./testnet-assistive-context.server";
-import { runCanonicalTestnetIntelligence } from "./testnet-intelligence-capability.server";
+import { runCanonicalTestnetIntelligence } from "./testnet-intelligence-capability-hybrid.server";
 import type { TestnetIntelligenceRequest } from "./testnet-intelligence-contract";
 
 function sha256Json(value: unknown): string {
