@@ -1,8 +1,8 @@
 name: Governed source persistence audit
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "47 */6 * * *"
+  # Emergency Supabase quota hold. Keep the audit manually runnable and
+  # change-triggered while recurring production reads are paused.
   push:
     branches: [main]
     paths:

@@ -1,8 +1,8 @@
 name: Governed production source ingestion
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "17 */6 * * *"
+  # Emergency Supabase free-tier quota hold. Keep governed ingestion manually
+  # runnable and change-triggered while recurring normalized writes are paused.
   push:
     branches: [main]
     paths:
