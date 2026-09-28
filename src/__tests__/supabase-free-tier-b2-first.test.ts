@@ -10,6 +10,7 @@ describe("Supabase free-tier B2-first storage contract", () => {
   const observationWorkflow = read(".github/workflows/b2-observation-payload-maintenance.yml");
   const observationWorker = read("scripts/ops/b2-archive-observation-payload-batch.mjs");
   const productionCoverageWorkflow = read(".github/workflows/global-production-coverage-gate.yml");
+  const orchestratorWorkflow = read(".github/workflows/intelligence-orchestrator.yml");
   const budget = read("scripts/ops/supabase-free-tier-budget.mjs");
 
   it("freezes bulk Supabase writes before the hard free-tier ceiling", () => {
@@ -58,5 +59,13 @@ describe("Supabase free-tier B2-first storage contract", () => {
     expect(productionCoverageWorkflow).toContain("supabase-free-tier-budget.mjs --require-bulk-write");
     expect(productionCoverageWorkflow.indexOf("supabase-free-tier-budget.mjs --require-bulk-write"))
       .toBeLessThan(productionCoverageWorkflow.indexOf("ingest-world-bank-live.mjs"));
+  });
+
+  it("keeps the manual intelligence orchestrator fail-closed while Supabase is frozen", () => {
+    expect(orchestratorWorkflow).toContain("workflow_dispatch:");
+    expect(orchestratorWorkflow).not.toContain("schedule:");
+    expect(orchestratorWorkflow).toContain("supabase-free-tier-budget.mjs --require-bulk-write");
+    expect(orchestratorWorkflow.indexOf("supabase-free-tier-budget.mjs --require-bulk-write"))
+      .toBeLessThan(orchestratorWorkflow.indexOf("Run due intelligence tasks serially"));
   });
 });
