@@ -1,0 +1,129 @@
+{
+  "schema_version": "geomacro.growth-agent.v1",
+  "mode": "prelaunch-shadow",
+  "mission": "Acquire qualified users and agent buyers at near-zero distribution cost without spam, fake engagement, paid ads, or raw-data giveaways.",
+  "canonical_origin": "https://geomacro.live",
+  "canonical_product": "Geomacro Decision Intelligence",
+  "canonical_free_preflight": "https://geomacro.live/api/x402/risk/availability",
+  "canonical_paid_product": "https://geomacro.live/api/x402/intelligence",
+  "commercial_contract": "config/decision-intelligence-commercial-contract.json",
+  "marketplace_contract": "config/agent-marketplace-distribution.json",
+  "distribution_contract": "config/auto-distribution.json",
+  "zero_cost_first": true,
+  "live_external_submission_enabled": false,
+  "live_social_publish_enabled": false,
+  "activation": {
+    "owner_ack_env": "GEOMACRO_GROWTH_AGENT_ACK",
+    "owner_ack_value": "I_AUTHORIZE_COMPLIANT_ZERO_COST_GROWTH",
+    "require_production_endpoint_health": true,
+    "require_live_402_before_paid_marketplace_claims": true,
+    "require_channel_credentials": true,
+    "require_receipt_or_listing_evidence": true
+  },
+  "growth_loop": [
+    "discover_or_refresh_free_distribution_opportunities",
+    "verify_current_terms_and_submission_requirements",
+    "prepare_platform_specific_listing_or_post",
+    "publish_or_submit_only_when_automation_is_permitted",
+    "record_receipt_or_observed_visibility",
+    "measure_qualified_visits_availability_checks_paid_calls",
+    "avoid_duplicate_or_low_value_distribution"
+  ],
+  "free_listing_targets": {
+    "official_mcp_registry": {
+      "cost_class": "free",
+      "mode": "publish_after_mcp_server_package_exists",
+      "automation": "github_oidc_or_supported_namespace_auth",
+      "production_enabled": false
+    },
+    "payapi_market": {
+      "cost_class": "free_listing",
+      "mode": "provider_listing_then_real_payment_verification",
+      "production_enabled": false
+    },
+    "x402_list": {
+      "cost_class": "free_for_own_domain_subject_to_current_terms",
+      "mode": "submit_then_probe_and_human_review",
+      "production_enabled": false
+    },
+    "x402_auto_indexes": {
+      "cost_class": "free",
+      "mode": "canonical_x402_metadata_and_observed_indexing",
+      "production_enabled": false
+    },
+    "agent402_tools": {
+      "cost_class": "free_origin_registration_subject_to_current_terms",
+      "mode": "register_origin_then_verify_crawler_visibility",
+      "production_enabled": false
+    },
+    "free_ai_tool_directories": {
+      "cost_class": "free_only",
+      "mode": "discover_verify_submit_when_terms_allow_automation_otherwise_queue_manual_form",
+      "production_enabled": false
+    }
+  },
+  "free_social_channels": {
+    "rss": {"enabled": true, "automation_allowed": true},
+    "telegram": {"enabled": true, "automation_allowed": true},
+    "discord": {"enabled": true, "automation_allowed": true},
+    "bluesky": {"enabled": true, "automation_allowed": true},
+    "mastodon": {"enabled": true, "automation_allowed": true},
+    "linkedin": {"enabled": false, "reason": "API approval required"},
+    "x": {"enabled": false, "reason": "Excluded from zero-cost core"}
+  },
+  "content_policy": {
+    "default_format": "useful_intelligence_first_then_soft_cta",
+    "allowed_content": [
+      "public_early_warning",
+      "country_risk_snapshot",
+      "corridor_risk_snapshot",
+      "macro_fx_change_snapshot",
+      "decision_intelligence_example",
+      "product_changelog",
+      "public_case_study"
+    ],
+    "required_value_before_cta": true,
+    "cta_targets": [
+      "free_availability_check",
+      "canonical_docs",
+      "paid_decision_intelligence_when_live"
+    ],
+    "never_publish": [
+      "raw_upstream_data",
+      "premium_evidence",
+      "private_customer_context",
+      "credentials",
+      "payment_proofs",
+      "unverified_claims",
+      "fake_testimonials"
+    ]
+  },
+  "anti_spam": {
+    "mass_unsolicited_dm": false,
+    "auto_reply_to_unrelated_threads": false,
+    "fake_accounts": false,
+    "fake_engagement": false,
+    "duplicate_cross_post_without_adaptation": false,
+    "captcha_bypass": false,
+    "terms_bypass": false,
+    "max_promotional_posts_per_channel_per_day": 2,
+    "minimum_hours_between_promotional_posts": 6,
+    "directory_resubmission_requires_state_change_or_cooldown": true
+  },
+  "success_metrics": [
+    "observed_directory_visibility",
+    "qualified_site_visits",
+    "free_availability_checks",
+    "paid_402_challenges",
+    "settled_paid_calls",
+    "repeat_paid_callers",
+    "revenue_per_distribution_channel"
+  ],
+  "cost_guardrails": {
+    "paid_ads": false,
+    "paid_social_api": false,
+    "paid_directory_submission": false,
+    "paid_influencer_campaign": false,
+    "allow_nonzero_cost_only_after_explicit_owner_approval": true
+  }
+}
