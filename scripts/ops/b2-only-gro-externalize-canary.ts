@@ -24,9 +24,13 @@ const cutoff = new Date(Date.now() - 6 * 3_600_000).toISOString();
 const { data: rows, error } = await db.from("geomacro_risk_objects")
   .select("object_id,payload,payload_hash,signature,signing_key_id,expires_at,archive_key")
   .is("archive_key", null).not("payload", "is", null)
-  .eq("signing_key_id", "geomacro-risk-2026-03").not("signature", "is", null)
+  .not("signing_key_id", "is", null).not("signature", "is", null)
   .lt("expires_at", cutoff).order("generated_at", { ascending: true }).limit(10);
-if (error || !rows?.length) throw error ?? new Error("B2_ONLY_GRO_SOURCE_UNAVAILABLE");
+if (error) throw error;
+if (!rows?.length) {
+  console.log(JSON.stringify({ ok: true, status: "complete", processed: 0 }));
+  process.exit(0);
+}
 const row = rows.find(candidate => /^gro_[A-Za-z0-9_]+$/.test(candidate.object_id) &&
   candidate.payload?.object_id === candidate.object_id &&
   candidate.payload?.integrity?.payload_hash === candidate.payload_hash &&
