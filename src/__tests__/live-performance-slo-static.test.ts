@@ -24,8 +24,10 @@ describe("live performance SLO guard", () => {
     expect(script).toContain("production_capacity_claim: false");
   });
 
-  it("runs continuously and preserves evidence", () => {
-    expect(workflow).toContain("cron: '17 */3 * * *'");
+  it("preserves manual evidence collection while recurring probes are quota-held", () => {
+    expect(workflow).toContain("workflow_dispatch: {}");
+    expect(workflow).toContain("Emergency Supabase quota hold");
+    expect(workflow).not.toContain("schedule:");
     expect(workflow).toContain("live-performance-slo.mjs");
     expect(workflow).toMatch(/actions\/upload-artifact@(v[4-9]|[0-9a-f]{40})/);
   });
