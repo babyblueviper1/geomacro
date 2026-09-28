@@ -2,8 +2,8 @@ name: Global Country Readiness Audit
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "25 * * * *"
+  # Emergency Supabase quota hold. The country census performs a large governed
+  # read fanout, so keep it manual/change-triggered until free-tier recovery ends.
   push:
     branches:
       - main
