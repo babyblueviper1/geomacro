@@ -7,6 +7,8 @@ describe("Supabase free-tier B2-first storage contract", () => {
   const contract = read("scripts/ops/sql/geomacro-free-tier-budget-and-b2-raw-candidates.sql");
   const worker = read("scripts/ops/b2-raw-storage-maintenance.mjs");
   const workflow = read(".github/workflows/b2-raw-storage-maintenance.yml");
+  const observationWorkflow = read(".github/workflows/b2-observation-payload-maintenance.yml");
+  const observationWorker = read("scripts/ops/b2-archive-observation-payload-batch.mjs");
   const budget = read("scripts/ops/supabase-free-tier-budget.mjs");
 
   it("freezes bulk Supabase writes before the hard free-tier ceiling", () => {
@@ -32,10 +34,19 @@ describe("Supabase free-tier B2-first storage contract", () => {
     expect(worker).toContain("supabase_source_absent: true");
   });
 
-  it("runs bounded hourly maintenance with production-scoped B2 secrets", () => {
-    expect(workflow).toContain('cron: "17 * * * *"');
+  it("runs bounded ten-minute raw maintenance with production-scoped B2 secrets", () => {
+    expect(workflow).toContain('cron: "*/10 * * * *"');
     expect(workflow).toContain('B2_RAW_MAINTENANCE_LIMIT: "100"');
     expect(workflow).toContain("B2_APPLICATION_KEY");
     expect(workflow).toContain("environment: production");
+  });
+
+  it("continuously externalizes old observation raw payloads while retaining normalized rows", () => {
+    expect(observationWorkflow).toContain('cron: "*/10 * * * *"');
+    expect(observationWorkflow).toContain('OBS_ARCHIVE_LIMIT: "10"');
+    expect(observationWorkflow).toContain("b2-archive-observation-payload-batch.mjs");
+    expect(observationWorker).toContain(".update({ raw_payload: null })");
+    expect(observationWorker).toContain("OBS_ARCHIVE_READBACK_INVALID");
+    expect(observationWorker).toContain("source_row_retained: true");
   });
 });
