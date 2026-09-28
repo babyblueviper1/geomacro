@@ -161,6 +161,8 @@ export async function answerQuestion(
   const verified = verifyObservations(observations);
   const publicGroups = publicVerification(verified, maxFindingsPerGroup);
   const verifiedGroupCount = publicGroups.filter(group => group.verified).length;
+  const corroboratedGroupCount = publicGroups.filter(group => group.corroborated).length;
+  const hasUsableFindings = publicGroups.some(group => (group.findings || []).length > 0);
 
   const answer = {
     schema_version: "intelligence-answer-2.0",
@@ -169,16 +171,17 @@ export async function answerQuestion(
     categories,
     data_mode: "ephemeral_live",
     cache_status: "miss",
-    message: verifiedGroupCount > 0
+    message: hasUsableFindings
       ? "Geomacro found these factors in real time based on your question."
-      : "Geomacro searched in real time based on your question, but did not find enough independently verified evidence for a stronger answer.",
+      : "Geomacro searched in real time based on your question, but did not find enough usable evidence for a structured answer.",
     source_identity_exposed: false,
     durable_live_storage_write: false,
     observation_count: observations.length,
     verified_group_count: verifiedGroupCount,
+    corroborated_group_count: corroboratedGroupCount,
     adapter_results: adapterResults,
     findings: publicGroups,
-    insufficient_evidence: verifiedGroupCount === 0,
+    insufficient_evidence: !hasUsableFindings,
     generated_at: new Date().toISOString()
   };
 
