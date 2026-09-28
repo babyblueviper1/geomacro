@@ -77,7 +77,7 @@ describe("commercial website source-of-truth contract", () => {
     }
   });
 
-  it("keeps the desktop decision path short and makes ecosystem visible", () => {
+  it("keeps the desktop decision path short while technical proof stays in a separate menu", () => {
     const shell = read("src/components/site-shell.tsx");
     expect(shell).toContain('const PRIMARY_NAV = [');
     expect(shell).toContain('label: "Intelligence"');
@@ -88,22 +88,23 @@ describe("commercial website source-of-truth contract", () => {
     expect(shell).toContain('label: "Data & API"');
     expect(shell).toContain("Product, evidence and roadmap");
     expect(shell).toContain("Technical Proof");
-    expect(shell).toContain('label: "Prediction Markets"');
-    expect(shell).toContain('label: "Bridge & Swap"');
-    expect(shell).toContain("real-money agent access fail-closed until production activation");
+    expect(shell).toContain('label: "Testnet API"');
+    expect(shell).toContain('label: "Agentic Commerce Demo"');
+    expect(shell).toContain('label: "Data Pipeline"');
+    expect(shell).toContain('label: "Arc / Onchain"');
   });
 
   it("keeps the homepage commercially understandable without turning it into a live-data dashboard", () => {
     const home = read("src/components/home/commercial-home.tsx");
-    expect(home).toContain("Global risk intelligence infrastructure");
+    expect(home).toContain("Global risk intelligence");
     expect(home).toContain("Turn world events into");
-    expect(home).toContain("decision-ready risk context");
-    expect(home).toContain("Why adopt Geomacro");
+    expect(home).toContain("decision-ready");
+    expect(home).toContain("Available at launch");
+    expect(home).toContain("What users get");
+    expect(home).toContain("Roadmap, not launch promise");
     expect(home).toContain("Who it is for");
-    expect(home).toContain("Ecosystem & partnership");
-    expect(home).toContain("Circle Alliance Program");
-    expect(home).toContain("Discuss a partnership");
-    expect(home).toContain("AgentCommerceStatus compact");
+    expect(home).toContain("Commercial access");
+    expect(home).not.toContain("AgentCommerceStatus compact");
     expect(home).not.toContain("AskGeomacroSection");
     expect(home).not.toContain("RiskIndicesSection");
     expect(home).not.toContain("114 sovereign countries");
@@ -130,16 +131,14 @@ describe("commercial website source-of-truth contract", () => {
     expect(route).not.toContain("country, corridor and event risk");
   });
 
-  it("keeps institutional workflow in Risk Gate -> customer policy -> customer action order", () => {
+  it("keeps institutional launch copy on current intelligence and moves Risk Gate mechanics to roadmap", () => {
     const route = read("src/routes/institutional.tsx");
-    expect(route).not.toContain("Risk Gate combines a verified country or corridor Risk Object with the customer's own policy");
-    expect(route).toContain("Risk Gate verifies the country or corridor Risk Object and returns bounded external risk context and a recommendation");
-    const gate = route.indexOf("Risk Gate returns bounded decision context");
-    const policy = route.indexOf("The customer's own identity, permissions and policy layer applies its rules after the Risk Gate response");
-    const execution = route.indexOf("Any execution after that remains under the customer's control");
-    expect(gate).toBeGreaterThanOrEqual(0);
-    expect(policy).toBeGreaterThan(gate);
-    expect(execution).toBeGreaterThan(policy);
+    expect(route).toContain("Available at launch");
+    expect(route).toContain("Separate Geopolitical, Macroeconomic and Critical Minerals Risk Indices");
+    expect(route).toContain("Signed Risk Objects and Risk Gate");
+    expect(route).toContain("Machine and automation layers come later");
+    expect(route).toContain("Risk Gate, paid agent/x402 production access and broader machine delivery remain roadmap or controlled capabilities until separately promoted");
+    expect(route).not.toContain("Risk Gate returns bounded decision context");
   });
 
   it("keeps Data, API and Agent availability explicit without advertising a free API", () => {
