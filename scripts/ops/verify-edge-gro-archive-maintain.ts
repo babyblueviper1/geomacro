@@ -16,7 +16,10 @@ const result = await fetch(`${url}/functions/v1/gro-archive-maintain`, {
   method: "POST", headers: { authorization: `Bearer ${service}`, apikey: service,
     "content-type": "application/json" }, body: "{}", signal: AbortSignal.timeout(100_000),
 });
-if (!result.ok) throw Error(`GRO_ARCHIVE_EDGE_${result.status}`);
+if (!result.ok) {
+  const details = result.status === 503 ? await result.json() as { missing_names?: string[] } : null;
+  throw Error(`GRO_ARCHIVE_EDGE_${result.status}:${details?.missing_names?.join(",") ?? ""}`);
+}
 const outcome = await result.json() as { ok: boolean; processed: number };
 if (!outcome.ok || outcome.processed < 1 || outcome.processed > 2) throw Error("GRO_ARCHIVE_NO_VERIFIED_WRITE");
 const { data: afterRows, error: afterError } = await db.from("geomacro_risk_objects")
