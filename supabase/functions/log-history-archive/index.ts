@@ -79,30 +79,52 @@ Deno.serve(async request => {
     if (input.action === "read") {
       const proof = JSON.parse(decoder.decode(await b2("GET", proofKey, readAccess, readSecret)));
       if (proof.schema !== "geomacro.supabase-log-archive.v1" || proof.start !== start.toISOString() ||
-          proof.key !== dataKey || !/^[a-f0-9]{64}$/.test(proof.sha256) ||
+          proof.end !== new Date(start.getTime() + 300_000).toISOString() || proof.key !== dataKey ||
+          !Number.isSafeInteger(proof.events) || proof.events < 0 || proof.events > 3000 ||
+          !Number.isSafeInteger(proof.bytes) || proof.bytes < 0 || proof.bytes > 5_000_000 ||
+          !/^[a-f0-9]{64}$/.test(proof.sha256) ||
           !/^[a-f0-9]{64}$/.test(proof.raw_sha256) || !Number.isSafeInteger(proof.raw_bytes) ||
           proof.raw_bytes < 0 || proof.raw_bytes > 16_000_000) throw Error("LOG_PROOF_INVALID");
       const compressed = await b2("GET", dataKey, readAccess, readSecret);
       if (compressed.length !== proof.bytes || await sha(compressed) !== proof.sha256) throw Error("LOG_ARCHIVE_HASH_MISMATCH");
       const raw = await gunzip(compressed);
       if (raw.length !== proof.raw_bytes || await sha(raw) !== proof.raw_sha256) throw Error("LOG_RAW_HASH_MISMATCH");
+      const lines = raw.length ? decoder.decode(raw).split("\n") : [""];
+      if (lines.pop() !== "" || lines.length !== proof.events) throw Error("LOG_COUNT_MISMATCH");
       return new Response(raw, { headers: { "content-type": "application/x-ndjson", "cache-control": "private, no-store" } });
     }
     if (input.action !== "archive") return new Response("Invalid action", { status: 400 });
     if (!manager || !writeAccess || !writeSecret) return new Response("Archive writer unavailable", { status: 503 });
     const end = new Date(start.getTime() + 300_000);
-    const query = "select timestamp,id,source,event_message,log_attributes from logs order by timestamp,id limit 3001";
-    const api = new URL(`https://api.supabase.com/v1/projects/ldpwajisioljyjtojvfx/analytics/endpoints/logs`);
-    api.search = new URLSearchParams({ sql: query, iso_timestamp_start: start.toISOString(),
-      iso_timestamp_end: end.toISOString() }).toString();
-    const response = await fetch(api, { headers: { authorization: `Bearer ${manager}` },
-      signal: AbortSignal.timeout(25_000) });
-    if (!response.ok) throw Error(`LOG_QUERY_${response.status}`);
-    const payload = await response.text();
-    if (payload.length > 16_000_000) throw Error("LOG_WINDOW_TOO_LARGE");
-    const parsed = JSON.parse(payload);
-    if (parsed.error || !Array.isArray(parsed.result) || parsed.result.length > 3000) throw Error("LOG_WINDOW_INCOMPLETE");
-    const raw = encoder.encode(parsed.result.map((event: unknown) => JSON.stringify(event)).join("\n") + "\n");
+    async function query(sql: string): Promise<unknown[]> {
+      const api = new URL("https://api.supabase.com/v1/projects/ldpwajisioljyjtojvfx/analytics/endpoints/logs");
+      api.search = new URLSearchParams({ sql, iso_timestamp_start: start.toISOString(),
+        iso_timestamp_end: end.toISOString() }).toString();
+      const response = await fetch(api, { headers: { authorization: `Bearer ${manager}` },
+        signal: AbortSignal.timeout(25_000) });
+      if (!response.ok) throw Error(`LOG_QUERY_${response.status}`);
+      const payload = await response.text();
+      if (payload.length > 16_000_000) throw Error("LOG_WINDOW_TOO_LARGE");
+      const parsed = JSON.parse(payload);
+      if (parsed.error || !Array.isArray(parsed.result)) throw Error("LOG_QUERY_INVALID");
+      return parsed.result;
+    }
+    // The API may cap results below the SQL LIMIT. Count independently and page
+    // in small slices; a silent cap, changing window, or missing page fails closed.
+    const countRows = await query("select count() as n from logs");
+    const count = Number((countRows[0] as { n?: number })?.n);
+    if (countRows.length !== 1 || !Number.isSafeInteger(count) || count < 0 || count > 3000) {
+      throw Error("LOG_WINDOW_COUNT_INVALID");
+    }
+    const events: unknown[] = [];
+    for (let offset = 0; offset < count; offset += 500) {
+      const page = await query(`select timestamp,id,source,event_message,log_attributes from logs order by timestamp,id limit 500 offset ${offset}`);
+      if (page.length !== Math.min(500, count - offset)) throw Error("LOG_PAGE_INCOMPLETE");
+      events.push(...page);
+    }
+    if (events.length !== count) throw Error("LOG_WINDOW_INCOMPLETE");
+    const raw = encoder.encode(events.length ? events.map(event => JSON.stringify(event)).join("\n") + "\n" : "");
+    if (raw.length > 16_000_000) throw Error("LOG_WINDOW_TOO_LARGE");
     const compressed = await gzip(raw);
     if (compressed.length > 5_000_000) throw Error("LOG_COMPRESSED_TOO_LARGE");
     await b2("PUT", dataKey, writeAccess, writeSecret, compressed);
@@ -110,7 +132,7 @@ Deno.serve(async request => {
       throw Error("LOG_READBACK_MISMATCH");
     }
     const proof = { schema: "geomacro.supabase-log-archive.v1", start: start.toISOString(), end: end.toISOString(),
-      key: dataKey, events: parsed.result.length, bytes: compressed.length, sha256: await sha(compressed),
+      key: dataKey, events: count, bytes: compressed.length, sha256: await sha(compressed),
       raw_bytes: raw.length, raw_sha256: await sha(raw), verified_at: new Date().toISOString() };
     const proofBytes = encoder.encode(JSON.stringify(proof));
     await b2("PUT", proofKey, writeAccess, writeSecret, proofBytes);
