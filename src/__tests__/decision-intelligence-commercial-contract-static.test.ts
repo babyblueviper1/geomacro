@@ -2,7 +2,9 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const contract = fs.readFileSync("src/lib/geomacro-intelligence-contract.ts", "utf8");
-const openapi = JSON.parse(fs.readFileSync("public/openapi-x402.json", "utf8"));
+const commercial = JSON.parse(
+  fs.readFileSync("config/decision-intelligence-commercial-contract.json", "utf8"),
+);
 
 describe("Decision Intelligence commercial contract", () => {
   it("requires canonical decision intelligence before paid delivery is valid", () => {
@@ -15,19 +17,41 @@ describe("Decision Intelligence commercial contract", () => {
     expect(contract).toContain('payload.methodology.customer_facing_output !== "decision_intelligence_v1"');
   });
 
-  it("publishes the same contract in the public x402 OpenAPI document", () => {
-    const response = openapi.components.schemas.AdaptiveResponse;
-    const decision = openapi.components.schemas.DecisionIntelligence;
-
-    expect(response.required).toContain("decision_intelligence");
-    expect(response.properties.decision_intelligence.items.$ref).toBe(
-      "#/components/schemas/DecisionIntelligence",
+  it("keeps the machine-readable commercial contract aligned with runtime enforcement", () => {
+    expect(commercial.schema_version).toBe(
+      "geomacro.decision-intelligence-commercial-contract.v1",
     );
-    expect(decision.properties.schema_version.const).toBe("geomacro.decision-intelligence.v1");
-    expect(decision.properties.delivery_boundary.const).toBe("DERIVED_DECISION_INTELLIGENCE_ONLY");
-    expect(decision.properties.raw_data_delivered.const).toBe(false);
-    expect(decision.properties.execution_authorized.const).toBe(false);
-    expect(decision.properties.cause.pattern).toBe("^Geomacro detects this because ");
-    expect(decision.properties.decision.properties.execution_authorized.const).toBe(false);
+    expect(commercial.response_schema).toBe("geomacro.decision-intelligence.v1");
+    expect(commercial.customer_facing_output).toBe("decision_intelligence_v1");
+    expect(commercial.delivery_boundary).toBe("DERIVED_DECISION_INTELLIGENCE_ONLY");
+    expect(commercial.raw_data_delivered).toBe(false);
+    expect(commercial.execution_authorized).toBe(false);
+    expect(commercial.cause_prefix).toBe("Geomacro detects this because ");
+    expect(commercial.required_fields).toEqual(
+      expect.arrayContaining([
+        "answer",
+        "cause",
+        "geomacro_detected",
+        "why_it_matters",
+        "decision",
+        "change",
+        "watch_next",
+        "evidence_quality",
+        "state_version",
+      ]),
+    );
+    expect(commercial.decision_actions).toEqual([
+      "PROCEED",
+      "PROCEED_WITH_GUARDRAILS",
+      "REVIEW",
+      "PAUSE",
+      "INSUFFICIENT_EVIDENCE",
+    ]);
+    expect(commercial.public_openapi_update_state).toBe("HELD_BY_WEBSITE_LOCK");
+    expect(commercial.public_openapi_unlock_required).toBe(true);
+    expect(commercial.commercial_rules.availability_first).toBe(true);
+    expect(commercial.commercial_rules.unavailable_is_not_payable).toBe(true);
+    expect(commercial.commercial_rules.raw_upstream_redistribution).toBe(false);
+    expect(commercial.commercial_rules.state_continuity_preferred_over_warehouse_growth).toBe(true);
   });
 });
