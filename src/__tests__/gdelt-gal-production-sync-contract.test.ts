@@ -15,7 +15,8 @@ describe("GDELT GAL production sync contract", () => {
     expect(sync).toContain('const AUTHORITATIVE_PROJECT_REF = "ldpwajisioljyjtojvfx"');
     expect(sync).toContain("APP_SUPABASE_SERVICE_ROLE_KEY");
     expect(sync).toContain("Storage read-back failed");
-    expect(sync).toContain('verification_method: "storage-readback-sha256"');
+    expect(sync).toContain('verification_method: b2Primary ? "b2-readback-sha256" : "storage-readback-sha256"');
+    expect(sync).toContain('B2 fragment read-back verification mismatch');
   });
 
   it("preserves bounded ingestion, deduplication and cursor health evidence", () => {
