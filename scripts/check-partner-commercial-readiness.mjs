@@ -66,7 +66,12 @@ if (discovery.commercial_path?.data_redistribution !== "derived-output-only unle
   fail("derived-only redistribution boundary missing");
 }
 
-if (positiveControl?.profile !== "FEDERICO_STRICT") fail("positive control profile mismatch");
+if (positiveControl?.calculation_namespace !== "federico_strict_evidence_v1") {
+  fail("positive control calculation namespace mismatch");
+}
+if (positiveControl?.expected?.publication_policy_accepts !== true) {
+  fail("positive control is not declared as a known-good publication vector");
+}
 if (!Array.isArray(positiveControl?.events) || positiveControl.events.length < 1) {
   fail("positive control contains no events");
 }
