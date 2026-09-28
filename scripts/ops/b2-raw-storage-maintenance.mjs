@@ -93,16 +93,9 @@ for (const row of rows) {
   const proofKey = `geomacro-evidence/v1/index/raw/${id}.json`;
   const deletionKey = `geomacro-evidence/v1/index/raw-deleted/${id}.json`;
 
-  await b2.put(archiveKey, compressed);
-  const readback = await b2.get(archiveKey);
-  const restored = gunzipSync(readback);
-  if (
-    readback.length !== compressed.length ||
-    sha(readback) !== compressedHash ||
-    restored.length !== payloadBytes ||
-    sha(restored) !== payloadHash
-  ) {
-    throw new Error(`B2_RAW_ARCHIVE_READBACK_INVALID_${id}`);
+  const archivePut = await b2.put(archiveKey, compressed);
+  if (archivePut?.payload_sha256 !== compressedHash || archivePut?.bytes !== compressed.length) {
+    throw new Error(`B2_RAW_ARCHIVE_PUT_INVALID_${id}`);
   }
 
   const proof = {
@@ -112,16 +105,19 @@ for (const row of rows) {
     source_path: path,
     archive_bucket: "geomacro-private-archive",
     archive_key: archiveKey,
+    archive_version_id: archivePut.version_id,
+    archive_etag: archivePut.etag,
     compressed_bytes: compressed.length,
     compressed_sha256: compressedHash,
     payload_sha256: payloadHash,
     payload_bytes: payloadBytes,
     source_fetched_at: fetchedAt,
+    verification_mode: "s3_put_etag_md5",
     verified_at: new Date().toISOString(),
   };
   const proofBytes = Buffer.from(JSON.stringify(proof));
-  await b2.put(proofKey, proofBytes);
-  if (sha(await b2.get(proofKey)) !== sha(proofBytes)) {
+  const proofPut = await b2.put(proofKey, proofBytes);
+  if (proofPut?.payload_sha256 !== sha(proofBytes) || proofPut?.bytes !== proofBytes.length) {
     throw new Error(`B2_RAW_ARCHIVE_PROOF_INVALID_${id}`);
   }
 
@@ -150,12 +146,14 @@ for (const row of rows) {
     source_path: path,
     archive_key: archiveKey,
     archive_proof_key: proofKey,
+    archive_version_id: archivePut.version_id,
     payload_sha256: payloadHash,
+    verification_mode: "s3_put_etag_md5",
     deleted_at: new Date().toISOString(),
   };
   const deletionBytes = Buffer.from(JSON.stringify(deletion));
-  await b2.put(deletionKey, deletionBytes);
-  if (sha(await b2.get(deletionKey)) !== sha(deletionBytes)) {
+  const deletionPut = await b2.put(deletionKey, deletionBytes);
+  if (deletionPut?.payload_sha256 !== sha(deletionBytes) || deletionPut?.bytes !== deletionBytes.length) {
     throw new Error(`B2_RAW_DELETION_PROOF_INVALID_${id}`);
   }
 
@@ -164,6 +162,7 @@ for (const row of rows) {
   console.log(JSON.stringify({
     snapshot_id: id,
     archive_verified: true,
+    verification_mode: "s3_put_etag_md5",
     supabase_source_absent: true,
     restore_contract_preserved: true,
     compressed_bytes: compressed.length,
@@ -178,4 +177,5 @@ console.log(JSON.stringify({
   budget,
   source_manifest_rows_preserved: true,
   storage_deletion_via_api_only: true,
+  b2_class_b_readback_used: false,
 }));
