@@ -97,7 +97,6 @@ jobs:
       - name: Install RSS/Telegram worker dependencies
         run: python -m pip install --disable-pip-version-check -r workers/telegram-flash/requirements.txt
 
-
       - name: Validate scheduler runtime
         shell: bash
         run: |
@@ -107,6 +106,9 @@ jobs:
           test "$(node -e 'console.log(new URL(process.env.APP_SUPABASE_URL).hostname.split(".")[0])')" = "ldpwajisioljyjtojvfx"
           node --check scripts/intelligence-orchestrator.mjs
           echo "PASS: authoritative scheduler runtime validated."
+
+      - name: Require Supabase free-tier bulk-write budget
+        run: node scripts/ops/supabase-free-tier-budget.mjs --require-bulk-write
 
       - name: Derive current public verification key
         shell: bash
@@ -128,7 +130,7 @@ jobs:
           const publicB64 = Buffer.from(
             createPublicKey(privateKey).export({ format: 'der', type: 'spki' }),
           ).toString('base64');
-          fs.appendFileSync(process.env.GITHUB_ENV, `RISK_OBJECT_SIGNING_PUBLIC_KEY_SPKI_B64=${publicB64}\\n`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `RISK_OBJECT_SIGNING_PUBLIC_KEY_SPKI_B64=${publicB64}\n`);
           console.log('PASS: current Risk Object public verification key derived from configured private key.');
           NODE
 
