@@ -1,4 +1,6 @@
 name: Arc Testnet Market Lifecycle & Indexing
+# Prediction market creation is manually dispatched. All live markets are
+# finalized; keep maintenance available on demand for deliberate testnet demos.
 
 on:
   workflow_dispatch:
@@ -14,12 +16,6 @@ on:
           - finalize-markets
           - resolve-markets
           - resolve-disputes
-  schedule:
-    - cron: "5 */2 * * *"
-    - cron: "15 */2 * * *"
-    - cron: "25 */2 * * *"
-    - cron: "30 */2 * * *"
-    - cron: "45 */2 * * *"
 
 permissions:
   contents: read
@@ -29,10 +25,7 @@ jobs:
     if: >-
       ${{
         github.ref == 'refs/heads/main' &&
-        (
-          (github.event_name == 'schedule' && github.event.schedule == '5 */2 * * *') ||
-          (github.event_name == 'workflow_dispatch' && inputs.mode == 'sync-lifecycle')
-        )
+        github.event_name == 'workflow_dispatch' && inputs.mode == 'sync-lifecycle'
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -82,10 +75,7 @@ jobs:
     if: >-
       ${{
         github.ref == 'refs/heads/main' &&
-        (
-          (github.event_name == 'schedule' && github.event.schedule == '25 */2 * * *') ||
-          (github.event_name == 'workflow_dispatch' && inputs.mode == 'sync-stakes')
-        )
+        github.event_name == 'workflow_dispatch' && inputs.mode == 'sync-stakes'
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -127,10 +117,7 @@ jobs:
     if: >-
       ${{
         github.ref == 'refs/heads/main' &&
-        (
-          (github.event_name == 'schedule' && github.event.schedule == '15 */2 * * *') ||
-          (github.event_name == 'workflow_dispatch' && inputs.mode == 'finalize-markets')
-        )
+        github.event_name == 'workflow_dispatch' && inputs.mode == 'finalize-markets'
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -182,10 +169,7 @@ jobs:
     if: >-
       ${{
         github.ref == 'refs/heads/main' &&
-        (
-          (github.event_name == 'schedule' && github.event.schedule == '30 */2 * * *') ||
-          (github.event_name == 'workflow_dispatch' && inputs.mode == 'resolve-markets')
-        )
+        github.event_name == 'workflow_dispatch' && inputs.mode == 'resolve-markets'
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -240,10 +224,7 @@ jobs:
     if: >-
       ${{
         github.ref == 'refs/heads/main' &&
-        (
-          (github.event_name == 'schedule' && github.event.schedule == '45 */2 * * *') ||
-          (github.event_name == 'workflow_dispatch' && inputs.mode == 'resolve-disputes')
-        )
+        github.event_name == 'workflow_dispatch' && inputs.mode == 'resolve-disputes'
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
