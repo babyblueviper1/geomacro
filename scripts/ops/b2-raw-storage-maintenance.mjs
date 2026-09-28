@@ -5,6 +5,9 @@ import { createClient } from "@supabase/supabase-js";
 import { createB2Client } from "./b2-s3-client.mjs";
 
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const TRANSIENT_READ_STATUSES = new Set([429, 500, 502, 503, 504]);
+const READ_ATTEMPTS = 4;
 const url = String(process.env.APP_SUPABASE_URL ?? "").trim();
 const role = String(process.env.APP_SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
 const limit = Number(process.env.B2_RAW_MAINTENANCE_LIMIT ?? 25);
@@ -32,16 +35,31 @@ const b2 = createB2Client({
 });
 
 async function archiveRead(id, sourcePath) {
-  const response = await fetch(`${url}/functions/v1/archive-verify-read`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${role}`, "content-type": "application/json" },
-    body: JSON.stringify({ kind: "raw", id, part: "archive", source_path: sourcePath }),
-    signal: AbortSignal.timeout(20_000),
-  });
-  if (!response.ok) throw new Error(`B2_RAW_VERIFY_READ_FAILED_${response.status}`);
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length > 20_000_000) throw new Error("B2_RAW_VERIFY_READ_TOO_LARGE");
-  return bytes;
+  for (let attempt = 1; attempt <= READ_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(`${url}/functions/v1/archive-verify-read`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${role}`, "content-type": "application/json" },
+        body: JSON.stringify({ kind: "raw", id, part: "archive", source_path: sourcePath }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (response.ok) {
+        const bytes = Buffer.from(await response.arrayBuffer());
+        if (bytes.length > 20_000_000) throw new Error("B2_RAW_VERIFY_READ_TOO_LARGE");
+        return bytes;
+      }
+      if (!TRANSIENT_READ_STATUSES.has(response.status) || attempt === READ_ATTEMPTS) {
+        throw new Error(`B2_RAW_VERIFY_READ_FAILED_${response.status}`);
+      }
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      if (message === "B2_RAW_VERIFY_READ_TOO_LARGE" || /^B2_RAW_VERIFY_READ_FAILED_\d+$/.test(message) || attempt === READ_ATTEMPTS) {
+        throw cause;
+      }
+    }
+    await sleep(500 * 2 ** (attempt - 1));
+  }
+  throw new Error("B2_RAW_VERIFY_READ_RETRY_EXHAUSTED");
 }
 
 const { data: budget, error: budgetError } = await db.rpc(
