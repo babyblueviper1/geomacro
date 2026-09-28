@@ -17,30 +17,25 @@ describe("technical-proof workflow policy", () => {
     }
   });
 
-  it("keeps all Arc Testnet lifecycle schedules in one permanent workflow", () => {
+  it("keeps Arc Testnet lifecycle available through manual dispatch", () => {
     const lifecycle = read(".github/workflows/market-lifecycle.yml");
-    expect(lifecycle).toContain('cron: "5 */2 * * *"');
-    expect(lifecycle).toContain('cron: "15 */2 * * *"');
-    expect(lifecycle).toContain('cron: "25 */2 * * *"');
-    expect(lifecycle).toContain('cron: "30 */2 * * *"');
-    expect(lifecycle).toContain('cron: "45 */2 * * *"');
     expect(lifecycle).toContain("node scripts/sync-lifecycle.js");
     expect(lifecycle).toContain("bun scripts/sync-stakes.js");
     expect(lifecycle).toContain("node scripts/finalize-markets.js");
     expect(lifecycle).toContain("node scripts/resolve-markets.js");
     expect(lifecycle).toContain("node scripts/resolve-disputes.js");
-    expect(lifecycle).not.toContain('cron: "*/15 * * * *"');
+    expect(lifecycle).not.toContain("schedule:");
     expect(lifecycle).not.toContain("timeout-minutes: 58");
     expect(lifecycle).toContain('bun-version: "1.4.2"');
   });
 
-  it("retains manual and scheduled resolution/finalization in the canonical lifecycle workflow", () => {
+  it("retains manual resolution/finalization in the canonical lifecycle workflow", () => {
     const workflow = read(".github/workflows/market-lifecycle.yml");
     for (const mode of ["sync-lifecycle","sync-stakes","finalize-markets","resolve-markets","resolve-disputes"]) {
       expect(workflow).toContain("- " + mode);
     }
     expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).toContain("schedule:");
+    expect(workflow).not.toContain("schedule:");
   });
 
   it("permanently excludes prediction markets from mainnet", () => {
