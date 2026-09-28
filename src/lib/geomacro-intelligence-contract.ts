@@ -121,6 +121,7 @@ export function assertGeomacroIntelligenceResponseContract(payload: unknown): as
     "signed_risk_objects",
     "gri_context",
     "current_state",
+    "decision_intelligence",
     "answer",
     "methodology",
     "limitations",
@@ -128,6 +129,36 @@ export function assertGeomacroIntelligenceResponseContract(payload: unknown): as
     if (field === "gri_context" && payload[field] === null) continue;
     if (!isRecord(payload[field]) && !Array.isArray(payload[field])) {
       throw new Error(`INTELLIGENCE_RESPONSE_FIELD_INVALID:${field}`);
+    }
+  }
+
+  if (!Array.isArray(payload.decision_intelligence)) {
+    throw new Error("INTELLIGENCE_RESPONSE_DECISION_INTELLIGENCE_INVALID");
+  }
+  if (payload.decision_intelligence.length !== payload.subjects.length) {
+    throw new Error("INTELLIGENCE_RESPONSE_DECISION_INTELLIGENCE_SUBJECT_COUNT_MISMATCH");
+  }
+  for (const row of payload.decision_intelligence) {
+    if (!isRecord(row)) {
+      throw new Error("INTELLIGENCE_RESPONSE_DECISION_INTELLIGENCE_ROW_INVALID");
+    }
+    if (row.schema_version !== "geomacro.decision-intelligence.v1") {
+      throw new Error("INTELLIGENCE_RESPONSE_DECISION_INTELLIGENCE_SCHEMA_INVALID");
+    }
+    if (row.delivery_boundary !== "DERIVED_DECISION_INTELLIGENCE_ONLY") {
+      throw new Error("INTELLIGENCE_RESPONSE_DECISION_INTELLIGENCE_BOUNDARY_INVALID");
+    }
+    if (row.raw_data_delivered !== false || row.execution_authorized !== false) {
+      throw new Error("INTELLIGENCE_RESPONSE_DECISION_INTELLIGENCE_SAFETY_BOUNDARY_INVALID");
+    }
+    if (typeof row.cause !== "string" || !row.cause.startsWith("Geomacro detects this because ")) {
+      throw new Error("INTELLIGENCE_RESPONSE_DECISION_INTELLIGENCE_CAUSE_INVALID");
+    }
+    if (!Array.isArray(row.geomacro_detected) || !Array.isArray(row.watch_next)) {
+      throw new Error("INTELLIGENCE_RESPONSE_DECISION_INTELLIGENCE_SIGNALS_INVALID");
+    }
+    if (!isRecord(row.decision) || row.decision.execution_authorized !== false) {
+      throw new Error("INTELLIGENCE_RESPONSE_DECISION_INTELLIGENCE_DECISION_BOUNDARY_INVALID");
     }
   }
 
@@ -183,6 +214,9 @@ export function assertGeomacroIntelligenceResponseContract(payload: unknown): as
   }
   if (!isRecord(payload.methodology) || payload.methodology.response_schema_version !== GEOMACRO_INTELLIGENCE_RESPONSE_SCHEMA) {
     throw new Error("INTELLIGENCE_RESPONSE_METHODOLOGY_CONTRACT_INVALID");
+  }
+  if (payload.methodology.customer_facing_output !== "decision_intelligence_v1") {
+    throw new Error("INTELLIGENCE_RESPONSE_DECISION_INTELLIGENCE_METHOD_MISSING");
   }
 }
 
