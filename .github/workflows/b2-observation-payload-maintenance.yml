@@ -18,8 +18,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  archive_verified_batch:
+  b2_canary:
     if: ${{ github.repository == 'blocknine0/geomacro' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      APP_SUPABASE_URL: ${{ secrets.APP_SUPABASE_URL }}
+      APP_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      B2_S3_ENDPOINT: https://s3.us-east-005.backblazeb2.com
+      B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+      B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+      OBS_ARCHIVE_LIMIT: "1"
+      OBS_ARCHIVE_SUFFIX: "0"
+    steps:
+      - name: Checkout canonical main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.4.2"
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Verify one observation archive path before fanout
+        run: node scripts/ops/b2-archive-observation-payload-batch.mjs
+
+  archive_verified_batch:
+    needs: b2_canary
+    if: ${{ github.repository == 'blocknine0/geomacro' && github.ref == 'refs/heads/main' && needs.b2_canary.result == 'success' }}
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -37,20 +65,16 @@ jobs:
       B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
       OBS_ARCHIVE_LIMIT: "2"
       OBS_ARCHIVE_SUFFIX: ${{ matrix.suffix }}
-
     steps:
       - name: Checkout canonical main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: "1.4.2"
-
       - name: Install locked dependencies
         run: bun install --frozen-lockfile --ignore-scripts
-
       - name: Archive verified observation payload shard to B2
         run: node scripts/ops/b2-archive-observation-payload-batch.mjs
